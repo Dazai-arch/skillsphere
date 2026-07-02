@@ -1,0 +1,43 @@
+const mongoose = require('mongoose');
+
+const UserSchema = new mongoose.Schema(
+  {
+    firebaseUid: { type: String, unique: true, sparse: true },
+    email:       { type: String, required: true, unique: true, lowercase: true, trim: true },
+    role:        { type: String, enum: ['candidate','company'], required: true, default: 'candidate' },
+    fullName:    { type: String, trim: true },
+    companyName: { type: String, trim: true },
+    photoURL:    { type: String, default: null },
+    provider:    { type: String, enum: ['email','google','github'], default: 'email' },
+    isVerified:  { type: Boolean, default: false },
+    isActive:    { type: Boolean, default: true },
+    refreshToken:        { type: String, default: null },
+    clerkEmailAddressId: { type: String, default: null },
+    lastLoginAt:         { type: Date,   default: null },
+
+    /* ── NEW: gates routing after signup ── */
+    profileCompleted: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+UserSchema.virtual('displayName').get(function () {
+  return this.role === 'company' ? this.companyName : this.fullName;
+});
+
+UserSchema.methods.toPublic = function () {
+  return {
+    id:               this._id,
+    email:            this.email,
+    role:             this.role,
+    displayName:      this.role === 'company' ? this.companyName : this.fullName,
+    photoURL:         this.photoURL,
+    isVerified:       this.isVerified,
+    provider:         this.provider,
+    profileCompleted: this.profileCompleted,   // ← frontend needs this for routing
+    createdAt:        this.createdAt,
+    lastLoginAt:      this.lastLoginAt,
+  };
+};
+
+module.exports = mongoose.model('User', UserSchema);
