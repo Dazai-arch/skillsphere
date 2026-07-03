@@ -12,10 +12,10 @@
  *   clerkClient.emailAddresses.* — email CRUD + OTP verification
  */
 
-const { createClerkClient } = require('@clerk/backend');
+// const { createClerkClient } = require('@clerk/backend');
 
-const clerkClient = createClerkClient({
-  secretKey: process.env.CLERK_SECRET_KEY,
-});
+// const clerkClient = createClerkClient({
+//   secretKey: process.env.CLERK_SECRET_KEY,
+// });
 
-module.exports = clerkClient;
+// module.exports = clerkClient;

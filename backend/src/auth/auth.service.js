@@ -72,6 +72,9 @@ const createFirebaseUser = async (email, password) => {
 
 const updateFirebasePassword = async (firebaseUid, newPassword) => {
   try {
+    // Works even for users originally created via Google/GitHub —
+    // Firebase simply adds/updates the "password" sign-in provider
+    // on the existing account rather than requiring it to already exist.
     await auth.updateUser(firebaseUid, { password: newPassword });
   } catch (err) {
     console.error('[Firebase] updatePassword error:', err.message);
@@ -231,16 +234,15 @@ const oauthSignin = async ({ idToken, provider = 'google', role, fullName, compa
 /**
  * FORGOT PASSWORD — step 1
  * Silently does nothing if email isn't registered (no enumeration).
+ *
+ * NOTE: We no longer block this for Google/GitHub accounts. Any
+ * registered account — regardless of how it originally signed up —
+ * can request an OTP and set/replace an email+password credential.
+ * This lets OAuth-only users "add" a password login going forward.
  */
 const sendForgotPasswordOtp = async (email) => {
   const user = await User.findOne({ email: email.toLowerCase() });
   if (!user) return { emailExists: false };
-
-  if (user.provider !== 'email')
-    throw new AppError(
-      `This account uses ${user.provider} sign-in. Password reset is not available.`,
-      400
-    );
 
   await sendOtp(email.toLowerCase(), 'forgot-password');
   return { emailExists: true };
@@ -260,6 +262,14 @@ const verifyForgotPasswordOtp = async ({ email, code }) => {
 
 /**
  * FORGOT PASSWORD — step 3
+ *
+ * For accounts that originally signed up via Google/GitHub (no
+ * firebaseUid-linked password yet), this call adds a password
+ * credential to their existing Firebase user rather than requiring
+ * one to already exist. We also flip `provider` to 'email' so the
+ * account is documented as having a password login available —
+ * remove this line if you'd rather preserve the original signup
+ * provider for display purposes only.
  */
 const resetPassword = async ({ resetToken, newPassword }) => {
   let decoded;

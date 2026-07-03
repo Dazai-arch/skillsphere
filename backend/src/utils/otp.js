@@ -193,7 +193,7 @@ const sendOtp = async (email, purpose) => {
   await OtpRecord.findOneAndUpdate(
     { email: email.toLowerCase(), purpose },
     { codeHash, expiresAt },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
   );
 
   const subject = purpose === 'signup'
