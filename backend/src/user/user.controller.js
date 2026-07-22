@@ -10,13 +10,16 @@ const { sendSuccess } = require('../utils/response');
 const getMe = async (req, res, next) => {
   try {
     // Re-fetch to get the latest data (req.user was set at token creation time)
-    const user = await User
-      .findById(req.user._id)
-      .select('-refreshToken -clerkEmailAddressId -firebaseUid');
+    const user = await User.findById(req.user._id);
 
     if (!user) return next(new AppError('User not found.', 404));
 
-    sendSuccess(res, { data: { user } });
+    // Use the same toPublic() shape as signin/signup/oauth so the frontend
+    // always gets a consistent { id, displayName, profileCompleted, ... }
+    // object no matter which endpoint it called. Previously this returned
+    // the raw Mongoose doc, so `displayName` (a virtual) was silently
+    // missing and every dashboard reload showed stale/incorrect data.
+    sendSuccess(res, { data: { user: user.toPublic() } });
   } catch (err) {
     next(err);
   }

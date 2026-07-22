@@ -8,6 +8,8 @@ const path       = require('path');
 const authRoutes    = require('./auth/auth.routes');
 const userRoutes    = require('./user/user.routes');
 const profileRoutes = require('./profile/profile.routes');
+const githubRoutes  = require('./github/github.routes');
+const roadmapRoutes = require('./roadmap/roadmap.routes');
 const AppError      = require('./utils/AppError');
 
 const app = express();
@@ -34,6 +36,8 @@ app.get('/health', (_req, res) => res.json({ success: true, message: 'SkillSpher
 app.use('/api/auth',    authLimiter, authRoutes);
 app.use('/api/user',    userRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/github',  githubRoutes);
+app.use('/api/roadmap', roadmapRoutes);
 
 app.use((req, _res, next) => next(new AppError(`Route ${req.originalUrl} not found.`, 404)));
 

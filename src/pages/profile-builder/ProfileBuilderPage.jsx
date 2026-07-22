@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import useTheme from '../../hooks/useTheme';
 import './profile-builder.css';
 import '../../components/auth/auth.css';
@@ -7,6 +8,7 @@ import '../../components/auth/auth.css';
 import SiteLogo    from '../../components/profile-builder/SiteLogo';
 import TagInput    from '../../components/profile-builder/TagInput';
 import Toggle      from '../../components/profile-builder/Toggle';
+import MonthYearPicker from '../../components/profile-builder/MonthYearPicker';
 import { NAV_ICONS } from '../../components/profile-builder/ProfileIcons';
 import {
   uid, makeEdu, makeExp, makeProj, makeCert, makeAward, makeLeader, makeVol, makePub,
@@ -18,6 +20,7 @@ const AUTOSAVE_DELAY = 1500; // ms after last keystroke
 
 export default function ProfileBuilderPage() {
   const navigate = useNavigate();
+  const { setUser } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const fileRef     = useRef(null);
   const certPdfRefs = useRef({});
@@ -31,8 +34,8 @@ export default function ProfileBuilderPage() {
   const [photoFile, setPhotoFile]   = useState(null);
   const [certFiles, setCertFiles]   = useState({}); // { certIndex: File }
 
-  /* ── Active nav (scroll-spy) ── */
-  const [active, setActive] = useState('personal');
+  /* ── Wizard step (which card is showing) ── */
+  const [step, setStep] = useState(0);
 
   /* ── Optional sections ── */
   const [secEnabled, setSecEnabled] = useState({
@@ -173,8 +176,8 @@ export default function ProfileBuilderPage() {
         }
       }
       if (errors.length) {
-        document.getElementById(`pb-sec-${errors[0].sectionId}`)
-          ?.scrollIntoView({ behavior:'smooth', block:'start' });
+        // Jump straight to the card that has the problem
+        goToStep(stepIndexOf(errors[0].sectionId));
       }
       return;
     }
@@ -183,7 +186,12 @@ export default function ProfileBuilderPage() {
     setSubmitting(true);
     try {
       await saveProfile(buildPayload(), photoFile, certFiles, true);
-      navigate('/dashboard');
+      // Update the shared auth state immediately — don't rely on the next
+      // ProtectedRoute re-fetching /me, which can race the backend write
+      // and briefly still report profileCompleted:false, bouncing us
+      // straight back to /profile-builder.
+      setUser(prev => prev ? { ...prev, profileCompleted: true } : prev);
+      navigate('/dashboard/candidate');
     } catch (err) {
       setSubmitting(false);
       alert(err.response?.data?.message || 'Failed to save profile. Please try again.');
@@ -214,7 +222,7 @@ export default function ProfileBuilderPage() {
     return acc;
   }, {});
 
-  /* ══ Scroll spy ══ */
+  /* ══ Section / step definitions ══ */
   const NAV_SECTIONS = [
     { id:'personal',   label:'Personal',       mandatory:true  },
     { id:'education',  label:'Education',      mandatory:true  },
@@ -229,26 +237,57 @@ export default function ProfileBuilderPage() {
     { id:'extras',     label:'Extras',         mandatory:false },
   ];
 
-  useEffect(() => {
-    const onScroll = () => {
-      const scrollY = window.scrollY + 120;
-      const sections = NAV_SECTIONS
-        .map(s => ({ id: s.id, el: document.getElementById(`pb-sec-${s.id}`) }))
-        .filter(s => s.el);
-      let current = sections[0]?.id || 'personal';
-      for (const { id, el } of sections) {
-        if (el.getBoundingClientRect().top + window.scrollY <= scrollY) current = id;
-      }
-      setActive(current);
-    };
-    window.addEventListener('scroll', onScroll, { passive:true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []); // eslint-disable-line
+  // Extra virtual step at the end for consent + final submit
+  const STEPS = [...NAV_SECTIONS, { id:'review', label:'Review & Submit', mandatory:true }];
+  const totalSteps = STEPS.length;
+  const currentId  = STEPS[step]?.id || 'personal';
 
-  const scrollToSection = (id) => {
-    const el = document.getElementById(`pb-sec-${id}`);
-    if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 90, behavior:'smooth' });
+  const stepIndexOf = (id) => STEPS.findIndex(s => s.id === id);
+
+  // A card only gets a "done" checkmark once it's actually filled in
+  // (or, for optional cards, once it's been skipped) — not just because
+  // the user jumped past it.
+  const isStepDone = (id) => {
+    switch (id) {
+      case 'personal':
+        return !!personal.fullName.trim() && !!personal.email.trim() && /\S+@\S+\.\S+/.test(personal.email);
+      case 'education':
+        return educations.some(e => e.institution.trim());
+      case 'experience':
+        return !secEnabled.experience || experiences.some(e => e.title.trim() || e.company.trim());
+      case 'projects':
+        return projects.some(p => p.name.trim());
+      case 'skills':
+        return !!(skills.languages.length || skills.frameworks.length || skills.tools.length || skills.libraries.length);
+      case 'certs':
+        return !secEnabled.certs || certs.some(c => c.name.trim());
+      case 'awards':
+        return !secEnabled.awards || awards.some(a => a.name.trim());
+      case 'leadership':
+        return !secEnabled.leadership || leaders.some(l => l.position.trim());
+      case 'volunteer':
+        return !secEnabled.volunteer || volunteers.some(v => v.org.trim());
+      case 'pubs':
+        return !secEnabled.pubs || pubs.some(p => p.title.trim());
+      case 'extras':
+        return !secEnabled.extras || !!extras.achievements.trim() || extras.interests.length > 0;
+      case 'review':
+        return bothAgreed;
+      default:
+        return false;
+    }
   };
+
+  const goToStep = (idx) => {
+    const clamped = Math.max(0, Math.min(idx, totalSteps - 1));
+    setStep(clamped);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const goNext = () => goToStep(step + 1);
+  const goBack = () => goToStep(step - 1);
+
+  // Only the active card is visible; everything else stays mounted (state-safe) but hidden.
+  const cardStyle = (idx) => (step === idx ? undefined : { display: 'none' });
 
   /* ══ Sub-components ══ */
   const SectionHeader = ({ id, label, mandatory }) => (
@@ -344,6 +383,29 @@ export default function ProfileBuilderPage() {
           <p>The more you share, the smarter your AI matches get. Everything marked <strong style={{color:'#22d3ee'}}>Required</strong> must be filled — optional sections can be toggled on or off.</p>
         </div>
 
+        {/* STEP TRACKER */}
+        <div className="pb-tracker">
+          <div className="pb-tracker-track">
+            {STEPS.map((s, i) => {
+              const done = isStepDone(s.id);
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`pb-tracker-step ${i === step ? 'active' : ''} ${done ? 'done' : ''}`}
+                  onClick={() => goToStep(i)}
+                >
+                  <span className="pb-tracker-num">{done ? '✓' : i + 1}</span>
+                  <span className="pb-tracker-label">{s.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="pb-tracker-bar">
+            <div className="pb-tracker-fill" style={{ width: `${(step / (totalSteps - 1)) * 100}%` }}/>
+          </div>
+        </div>
+
         <div className="pb-layout">
           {/* SIDEBAR */}
           <aside className="pb-sidebar">
@@ -362,11 +424,11 @@ export default function ProfileBuilderPage() {
                 <div className="pb-strength-fill" style={{ width:`${strength}%` }}/>
               </div>
             </div>
-            {NAV_SECTIONS.map(s => {
+            {NAV_SECTIONS.map((s, i) => {
               const skipped = !s.mandatory && !secEnabled[s.id];
               return (
-                <button key={s.id} className={`pb-nav-item ${active===s.id?'active':''} ${skipped?'skipped':''}`}
-                  onClick={() => scrollToSection(s.id)}>
+                <button key={s.id} className={`pb-nav-item ${currentId===s.id?'active':''} ${skipped?'skipped':''}`}
+                  onClick={() => goToStep(i)}>
                   <span className="pb-nav-icon">{NAV_ICONS[s.id]}</span>
                   {s.label}
                   {s.mandatory && <span className="pb-nav-mandatory"/>}
@@ -379,7 +441,7 @@ export default function ProfileBuilderPage() {
           <main className="pb-content">
 
             {/* PERSONAL */}
-            <section id="pb-sec-personal" className={`pb-section${errSections.has('personal')?' pb-sec-error':''}`}>
+            <section id="pb-sec-personal" style={cardStyle(0)} className={`pb-section${errSections.has('personal')?' pb-sec-error':''}`}>
               <SectionHeader id="personal" label="Personal information" mandatory/>
               <div className="pb-section-body">
                 <InlineErrors id="personal"/>
@@ -426,7 +488,7 @@ export default function ProfileBuilderPage() {
             </section>
 
             {/* EDUCATION */}
-            <section id="pb-sec-education" className={`pb-section${errSections.has('education')?' pb-sec-error':''}`}>
+            <section id="pb-sec-education" style={cardStyle(1)} className={`pb-section${errSections.has('education')?' pb-sec-error':''}`}>
               <SectionHeader id="education" label="Education" mandatory/>
               <div className="pb-section-body">
                 <InlineErrors id="education"/>
@@ -444,9 +506,9 @@ export default function ProfileBuilderPage() {
                       <div className="pb-field"><label className="pb-label">Location</label>
                         <input className="pb-input" placeholder="New Delhi, India" value={edu.location} onChange={e=>updEdu(edu.id,'location',e.target.value)}/></div>
                       <div className="pb-field"><label className="pb-label">Start date</label>
-                        <input className="pb-input" type="month" value={edu.startDate} onChange={e=>updEdu(edu.id,'startDate',e.target.value)}/></div>
+                        <MonthYearPicker id={`edu-start-${edu.id}`} value={edu.startDate} onChange={v=>updEdu(edu.id,'startDate',v)} placeholder="Select start month"/></div>
                       <div className="pb-field"><label className="pb-label">End date</label>
-                        <input className="pb-input" type="month" value={edu.endDate} onChange={e=>updEdu(edu.id,'endDate',e.target.value)}/></div>
+                        <MonthYearPicker id={`edu-end-${edu.id}`} value={edu.endDate} onChange={v=>updEdu(edu.id,'endDate',v)} placeholder="Select end month"/></div>
                       <div className="pb-field"><label className="pb-label">GPA</label>
                         <input className="pb-input" placeholder="8.7 / 10" value={edu.gpa} onChange={e=>updEdu(edu.id,'gpa',e.target.value)}/></div>
                       <div className="pb-field pb-col-full"><label className="pb-label">Relevant coursework</label>
@@ -459,7 +521,7 @@ export default function ProfileBuilderPage() {
             </section>
 
             {/* EXPERIENCE */}
-            <section id="pb-sec-experience" className="pb-section">
+            <section id="pb-sec-experience" style={cardStyle(2)} className="pb-section">
               <SectionHeader id="experience" label="Work experience" mandatory={false}/>
               {secEnabled.experience ? (
                 <div className="pb-section-body">
@@ -475,10 +537,10 @@ export default function ProfileBuilderPage() {
                         <div className="pb-field"><label className="pb-label">Location</label>
                           <input className="pb-input" placeholder="Pune, India" value={exp.location} onChange={e=>updExp(exp.id,'location',e.target.value)}/></div>
                         <div className="pb-field"><label className="pb-label">Start date</label>
-                          <input className="pb-input" type="month" value={exp.startDate} onChange={e=>updExp(exp.id,'startDate',e.target.value)}/></div>
+                          <MonthYearPicker id={`exp-start-${exp.id}`} value={exp.startDate} onChange={v=>updExp(exp.id,'startDate',v)} placeholder="Select start month"/></div>
                         {!exp.current && (
                           <div className="pb-field"><label className="pb-label">End date</label>
-                            <input className="pb-input" type="month" value={exp.endDate} onChange={e=>updExp(exp.id,'endDate',e.target.value)}/></div>
+                            <MonthYearPicker id={`exp-end-${exp.id}`} value={exp.endDate} onChange={v=>updExp(exp.id,'endDate',v)} placeholder="Select end month"/></div>
                         )}
                         <div className="pb-field pb-col-full">
                           <label className="pb-check-row" htmlFor={`cur-${exp.id}`}>
@@ -497,7 +559,7 @@ export default function ProfileBuilderPage() {
             </section>
 
             {/* PROJECTS */}
-            <section id="pb-sec-projects" className={`pb-section${errSections.has('projects')?' pb-sec-error':''}`}>
+            <section id="pb-sec-projects" style={cardStyle(3)} className={`pb-section${errSections.has('projects')?' pb-sec-error':''}`}>
               <SectionHeader id="projects" label="Projects" mandatory/>
               <div className="pb-section-body">
                 <InlineErrors id="projects"/>
@@ -515,9 +577,9 @@ export default function ProfileBuilderPage() {
                       <div className="pb-field"><label className="pb-label">Live demo</label>
                         <input className="pb-input" placeholder="https://..." value={proj.live} onChange={e=>updProj(proj.id,'live',e.target.value)}/></div>
                       <div className="pb-field"><label className="pb-label">Start date</label>
-                        <input className="pb-input" type="month" value={proj.startDate} onChange={e=>updProj(proj.id,'startDate',e.target.value)}/></div>
+                        <MonthYearPicker id={`proj-start-${proj.id}`} value={proj.startDate} onChange={v=>updProj(proj.id,'startDate',v)} placeholder="Select start month"/></div>
                       <div className="pb-field"><label className="pb-label">End date</label>
-                        <input className="pb-input" type="month" value={proj.endDate} onChange={e=>updProj(proj.id,'endDate',e.target.value)}/></div>
+                        <MonthYearPicker id={`proj-end-${proj.id}`} value={proj.endDate} onChange={v=>updProj(proj.id,'endDate',v)} placeholder="Select end month"/></div>
                       <div className="pb-field pb-col-full"><label className="pb-label">Description</label>
                         <textarea className="pb-textarea" rows={4} placeholder={"• Real-time collaboration\n• AI-based skill scoring"} value={proj.desc} onChange={e=>updProj(proj.id,'desc',e.target.value)}/></div>
                     </div>
@@ -528,7 +590,7 @@ export default function ProfileBuilderPage() {
             </section>
 
             {/* SKILLS */}
-            <section id="pb-sec-skills" className={`pb-section${errSections.has('skills')?' pb-sec-error':''}`}>
+            <section id="pb-sec-skills" style={cardStyle(4)} className={`pb-section${errSections.has('skills')?' pb-sec-error':''}`}>
               <SectionHeader id="skills" label="Technical skills" mandatory/>
               <div className="pb-section-body">
                 <InlineErrors id="skills"/>
@@ -547,7 +609,7 @@ export default function ProfileBuilderPage() {
             </section>
 
             {/* CERTIFICATIONS */}
-            <section id="pb-sec-certs" className="pb-section">
+            <section id="pb-sec-certs" style={cardStyle(5)} className="pb-section">
               <SectionHeader id="certs" label="Certifications" mandatory={false}/>
               {secEnabled.certs ? (
                 <div className="pb-section-body">
@@ -561,7 +623,7 @@ export default function ProfileBuilderPage() {
                         <div className="pb-field"><label className="pb-label">Organization</label>
                           <input className="pb-input" placeholder="Amazon Web Services" value={cert.org} onChange={e=>updCert(cert.id,'org',e.target.value)}/></div>
                         <div className="pb-field"><label className="pb-label">Issue date</label>
-                          <input className="pb-input" type="month" value={cert.issueDate} onChange={e=>updCert(cert.id,'issueDate',e.target.value)}/></div>
+                          <MonthYearPicker id={`cert-issue-${cert.id}`} value={cert.issueDate} onChange={v=>updCert(cert.id,'issueDate',v)} placeholder="Select issue month"/></div>
                         <div className="pb-field"><label className="pb-label">Credential URL</label>
                           <input className="pb-input" placeholder="https://..." value={cert.credUrl} onChange={e=>updCert(cert.id,'credUrl',e.target.value)}/></div>
                         <div className="pb-field pb-col-full">
@@ -599,7 +661,7 @@ export default function ProfileBuilderPage() {
             </section>
 
             {/* AWARDS */}
-            <section id="pb-sec-awards" className="pb-section">
+            <section id="pb-sec-awards" style={cardStyle(6)} className="pb-section">
               <SectionHeader id="awards" label="Awards" mandatory={false}/>
               {secEnabled.awards ? (
                 <div className="pb-section-body">
@@ -623,7 +685,7 @@ export default function ProfileBuilderPage() {
             </section>
 
             {/* LEADERSHIP */}
-            <section id="pb-sec-leadership" className="pb-section">
+            <section id="pb-sec-leadership" style={cardStyle(7)} className="pb-section">
               <SectionHeader id="leadership" label="Leadership" mandatory={false}/>
               {secEnabled.leadership ? (
                 <div className="pb-section-body">
@@ -649,7 +711,7 @@ export default function ProfileBuilderPage() {
             </section>
 
             {/* VOLUNTEER */}
-            <section id="pb-sec-volunteer" className="pb-section">
+            <section id="pb-sec-volunteer" style={cardStyle(8)} className="pb-section">
               <SectionHeader id="volunteer" label="Volunteer experience" mandatory={false}/>
               {secEnabled.volunteer ? (
                 <div className="pb-section-body">
@@ -675,7 +737,7 @@ export default function ProfileBuilderPage() {
             </section>
 
             {/* PUBLICATIONS */}
-            <section id="pb-sec-pubs" className="pb-section">
+            <section id="pb-sec-pubs" style={cardStyle(9)} className="pb-section">
               <SectionHeader id="pubs" label="Publications" mandatory={false}/>
               {secEnabled.pubs ? (
                 <div className="pb-section-body">
@@ -701,7 +763,7 @@ export default function ProfileBuilderPage() {
             </section>
 
             {/* EXTRAS */}
-            <section id="pb-sec-extras" className="pb-section">
+            <section id="pb-sec-extras" style={cardStyle(10)} className="pb-section">
               <SectionHeader id="extras" label="Achievements & interests" mandatory={false}/>
               {secEnabled.extras ? (
                 <div className="pb-section-body">
@@ -716,55 +778,84 @@ export default function ProfileBuilderPage() {
               ) : <SkippedMsg/>}
             </section>
 
-            {/* CONSENT */}
-            <div id="pb-consent-section" className={`pb-consent-card${consentError?' pb-consent-error':''}`}>
-              <div className="auth-terms-row">
-                <input id="consent-storage" type="checkbox" className="auth-checkbox" checked={consent.storage}
-                  onChange={e=>{setConsent(c=>({...c,storage:e.target.checked}));if(e.target.checked&&consent.recruiter)setConsentError(false);}}/>
-                <label htmlFor="consent-storage" className="auth-terms-text">
-                  My profile data will be securely stored and used to maintain my SkillSphere profile.
-                </label>
+            {/* WIZARD NAV — shown on every regular card (not on the final review card) */}
+            {step < NAV_SECTIONS.length && (
+              <div className="pb-wizard-nav">
+                <button type="button" className="pb-wizard-btn pb-wizard-back" onClick={goBack} disabled={step===0}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6"/>
+                  </svg>
+                  Back
+                </button>
+                <span className="pb-wizard-progress-text">Step {step+1} of {totalSteps}</span>
+                <button type="button" className="pb-wizard-btn pb-wizard-next" onClick={goNext}>
+                  {step === NAV_SECTIONS.length - 1 ? 'Review & Submit' : 'Next'}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6"/>
+                  </svg>
+                </button>
               </div>
-              <div className="auth-terms-row">
-                <input id="consent-recruiter" type="checkbox" className="auth-checkbox" checked={consent.recruiter}
-                  onChange={e=>{setConsent(c=>({...c,recruiter:e.target.checked}));if(e.target.checked&&consent.storage)setConsentError(false);}}/>
-                <label htmlFor="consent-recruiter" className="auth-terms-text">
-                  My skills, projects, certifications, and documents may be viewed by recruiters and hiring companies on SkillSphere.
-                </label>
-              </div>
-              {consentError && (
-                <p className="pb-consent-err-text">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  Please tick both checkboxes to complete your profile.
-                </p>
-              )}
-            </div>
+            )}
 
-            {/* BOTTOM BAR */}
-            <div className={`pb-bottom-bar${formErrors.length>0?' pb-bottom-bar-error':''}`}>
-              <p className="pb-bottom-hint">
-                {formErrors.length>0 ? (
-                  <span className="pb-bottom-err-text">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    Please fix the required fields highlighted above.
-                  </span>
-                ) : !bothAgreed ? (
-                  <span style={{fontSize:'0.76rem',color:'rgba(255,255,255,0.35)'}}>
-                    Tick both consent boxes above to enable the Complete profile button.
-                  </span>
-                ) : 'You can edit any of this later from your profile.'}
-              </p>
-              <button
-                id="btn-complete-profile"
-                className={`pb-complete-link${(!bothAgreed||submitting)?' pb-complete-link-disabled':''}`}
-                onClick={handleComplete}
-                disabled={submitting}
-              >
-                {submitting ? 'Saving…' : 'Complete profile'}
+            {/* REVIEW & SUBMIT (final card: consent + complete profile) */}
+            <div style={{ display: step === NAV_SECTIONS.length ? undefined : 'none' }}>
+              <button type="button" className="pb-wizard-btn pb-wizard-back pb-review-back" onClick={goBack}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                  <polyline points="15 18 9 12 15 6"/>
                 </svg>
+                Back to Extras
               </button>
+
+              {/* CONSENT */}
+              <div id="pb-consent-section" className={`pb-consent-card${consentError?' pb-consent-error':''}`}>
+                <div className="auth-terms-row">
+                  <input id="consent-storage" type="checkbox" className="auth-checkbox" checked={consent.storage}
+                    onChange={e=>{setConsent(c=>({...c,storage:e.target.checked}));if(e.target.checked&&consent.recruiter)setConsentError(false);}}/>
+                  <label htmlFor="consent-storage" className="auth-terms-text">
+                    My profile data will be securely stored and used to maintain my SkillSphere profile.
+                  </label>
+                </div>
+                <div className="auth-terms-row">
+                  <input id="consent-recruiter" type="checkbox" className="auth-checkbox" checked={consent.recruiter}
+                    onChange={e=>{setConsent(c=>({...c,recruiter:e.target.checked}));if(e.target.checked&&consent.storage)setConsentError(false);}}/>
+                  <label htmlFor="consent-recruiter" className="auth-terms-text">
+                    My skills, projects, certifications, and documents may be viewed by recruiters and hiring companies on SkillSphere.
+                  </label>
+                </div>
+                {consentError && (
+                  <p className="pb-consent-err-text">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Please tick both checkboxes to complete your profile.
+                  </p>
+                )}
+              </div>
+
+              {/* BOTTOM BAR */}
+              <div className={`pb-bottom-bar${formErrors.length>0?' pb-bottom-bar-error':''}`}>
+                <p className="pb-bottom-hint">
+                  {formErrors.length>0 ? (
+                    <span className="pb-bottom-err-text">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      Please fix the required fields highlighted above.
+                    </span>
+                  ) : !bothAgreed ? (
+                    <span style={{fontSize:'0.76rem',color:'rgba(255,255,255,0.35)'}}>
+                      Tick both consent boxes above to enable the Complete profile button.
+                    </span>
+                  ) : 'You can edit any of this later from your profile.'}
+                </p>
+                <button
+                  id="btn-complete-profile"
+                  className={`pb-complete-link${(!bothAgreed||submitting)?' pb-complete-link-disabled':''}`}
+                  onClick={handleComplete}
+                  disabled={submitting}
+                >
+                  {submitting ? 'Saving…' : 'Complete profile'}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                  </svg>
+                </button>
+              </div>
             </div>
 
           </main>

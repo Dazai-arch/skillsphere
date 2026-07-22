@@ -209,4 +209,82 @@ export const saveProfile = async (profileData, photoFile = null, certFiles = {},
   return data.data.profile;
 };
 
+/* ══════════════════════════════════════════════════
+   CAREER ROADMAP
+══════════════════════════════════════════════════ */
+
+/**
+ * Fetches the signed-in candidate's saved roadmaps.
+ * Returns { current, previous } — either may be null if the
+ * user has never generated a roadmap yet / has no previous one.
+ */
+export const getRoadmap = async () => {
+  const { data } = await api.get('/roadmap');
+  return data.data;
+};
+
+/**
+ * Generates a fresh roadmap for the given target role.
+ * Backend rotates current -> previous (discarding the old previous)
+ * and the new roadmap becomes current. Returns { current, previous }.
+ * This calls an LLM server-side, so it can take several seconds —
+ * callers should show a generating/loading state.
+ */
+export const generateRoadmap = async (targetRole) => {
+  const { data } = await api.post('/roadmap/generate', { targetRole });
+  return data.data;
+};
+
+/**
+ * Swaps current <-> previous. 404s (thrown as an error) if there's
+ * no previous roadmap saved. Calling it twice in a row flips back,
+ * so it doubles as undo/redo.
+ */
+export const loadPreviousRoadmap = async () => {
+  const { data } = await api.post('/roadmap/load-previous');
+  return data.data;
+};
+
+/* ══════════════════════════════════════════════════
+   JOBS
+══════════════════════════════════════════════════ */
+
+/**
+ * Recommended jobs for the dashboard's "Recommended for you" row.
+ * No jobs/matching endpoint exists on the backend yet — this call
+ * will simply 404 until one does. Callers should treat any failure
+ * as "no recommendations yet" rather than a real error, so once a
+ * real /jobs/recommended route is added on the backend, this starts
+ * returning real data with zero changes needed on the frontend.
+ */
+export const getRecommendedJobs = async () => {
+  try {
+    const { data } = await api.get('/jobs/recommended');
+    return data.data.jobs || [];
+  } catch {
+    return [];
+  }
+};
+
+/* ══════════════════════════════════════════════════
+   GITHUB
+══════════════════════════════════════════════════ */
+
+/**
+ * Fetches the signed-in candidate's top GitHub repos through our own
+ * backend (which attaches a server-side token), instead of calling
+ * api.github.com directly from the browser — that was capped at
+ * 60 requests/hour per IP; this raises it to 5,000/hour.
+ * Returns { repos, reason? } — reason is one of 'no-username',
+ * 'not-found', or 'fetch-failed' when repos comes back empty.
+ */
+export const getGithubRepos = async () => {
+  try {
+    const { data } = await api.get('/github/repos');
+    return data.data;
+  } catch {
+    return { repos: [], reason: 'fetch-failed' };
+  }
+};
+
 export default api;

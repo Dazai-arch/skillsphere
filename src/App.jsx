@@ -1,32 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { getAccessToken, getMe } from './services/api';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
-import Homepage          from './pages/homepage';
-import SignInPage        from './pages/SignInPage';
-import GetStartedPage    from './pages/GetStartedPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ProfileBuilderPage from './pages/profile-builder/ProfileBuilderPage';
-
-/* ══════════════════════════════════════════════════
-   useAuth — fetches current user once on mount.
-   Returns { user, loading }.
-   user is null if not signed in.
-══════════════════════════════════════════════════ */
-function useAuth() {
-  const [user, setUser]       = useState(undefined); // undefined = still loading
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!getAccessToken()) { setUser(null); setLoading(false); return; }
-    getMe()
-      .then(u => setUser(u))
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return { user, loading };
-}
+import Homepage          from './pages/home/HomePage';
+import SignInPage        from './pages/auth/SignInPage';
+import GetStartedPage    from './pages/auth/GetStartedPage';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ProfileBuilderPage    from './pages/profile-builder/ProfileBuilderPage';
+import StudentDashboardPage from './pages/user/StudentDashboardPage';
+import CareerRoadmapPage   from './pages/user/CareerRoadmapPage';
+import ProfilePage         from './pages/user/ProfilePage';
+import JobsPage            from './pages/user/JobsPage';
+import CompanyDashboardPage from './pages/company/CompanyDashboardPage';
+import CompanyProfilePage   from './pages/company/CompanyProfilePage';
+import PostJobPage          from './pages/company/PostJobPage';
+import CandidateLayout      from './layouts/CandidateLayout';
+import CompanyLayout        from './layouts/CompanyLayout';
+import { JobsProvider }     from './context/JobsContext';
 
 /* ══════════════════════════════════════════════════
    ProtectedRoute
@@ -42,8 +32,8 @@ function ProtectedRoute({ children, requireRole }) {
   const location = useLocation();
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0f0f1a' }}>
-      <div style={{ width:36, height:36, border:'3px solid #6366f1', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/>
+    <div style={{ position: 'relative', zIndex: 9999, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'var(--bg-page)' }}>
+      <div style={{ width:36, height:36, border:'3px solid var(--border-card)', borderTopColor:'var(--text-primary)', borderRadius:'50%', animation:'spin 0.8s linear infinite' }}/>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
@@ -79,30 +69,51 @@ function GuestRoute({ children }) {
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        {/* Public */}
-        <Route path="/" element={<Homepage />} />
+      <AuthProvider>
+      <JobsProvider>
+        <Routes>
+          {/* Public */}
+          <Route path="/" element={<Homepage />} />
 
-        {/* Auth pages — redirect away if already signed in */}
-        <Route path="/signin"          element={<GuestRoute><SignInPage /></GuestRoute>} />
-        <Route path="/get-started"     element={<GuestRoute><GetStartedPage /></GuestRoute>} />
-        <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+          {/* Auth pages — redirect away if already signed in */}
+          <Route path="/signin"          element={<GuestRoute><SignInPage /></GuestRoute>} />
+          <Route path="/get-started"     element={<GuestRoute><GetStartedPage /></GuestRoute>} />
+          <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
 
-        {/* Profile builder — candidates only, before dashboard */}
-        <Route path="/profile-builder" element={
-          <ProtectedRoute>
-            <ProfileBuilderPage />
-          </ProtectedRoute>
-        } />
+          {/* Profile builder — candidates only, before dashboard */}
+          <Route path="/profile-builder" element={
+            <ProtectedRoute>
+              <ProfileBuilderPage />
+            </ProtectedRoute>
+          } />
 
-        {/* Dashboard stubs — replace with real components later */}
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <div style={{ color:'white', padding:40 }}>Dashboard coming soon</div>
-          </ProtectedRoute>
-        } />
+          {/* Candidate area — Sidebar/Topbar mount once via CandidateLayout
+              and stay mounted while these child pages swap via <Outlet/> */}
+          <Route element={
+            <ProtectedRoute requireRole="candidate">
+              <CandidateLayout />
+            </ProtectedRoute>
+          }>
+            <Route path="/dashboard/candidate" element={<StudentDashboardPage />} />
+            <Route path="/roadmap"             element={<CareerRoadmapPage />} />
+            <Route path="/jobs"                element={<JobsPage />} />
+            <Route path="/profile"             element={<ProfilePage />} />
+          </Route>
 
-      </Routes>
+          {/* Company area — same persistent-layout pattern */}
+          <Route element={
+            <ProtectedRoute requireRole="company">
+              <CompanyLayout />
+            </ProtectedRoute>
+          }>
+            <Route path="/dashboard/company" element={<CompanyDashboardPage />} />
+            <Route path="/company-profile"   element={<CompanyProfilePage />} />
+            <Route path="/postings"          element={<PostJobPage />} />
+          </Route>
+
+        </Routes>
+      </JobsProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
