@@ -109,7 +109,8 @@ const FORM_CONFIGS = {
     type: 'list', itemLabel: 'Project',
     fields: [
       { name: 'Project Name' },
-      { name: 'Link' },
+      { name: 'GitHub Repo' },
+      { name: 'Live Link' },
       { name: 'Tech Stack' },
       { name: 'Description' }
     ]
@@ -177,7 +178,7 @@ const uid = () => Math.random().toString(36).slice(2, 11);
    SECTION ADAPTERS
    Convert between the profile document's real shape and the flat
    { 'Display Label': value } rows the generic form renders, and back.
-   Unexposed backend fields (e.g. education.gpa, project.live) are kept
+   Unexposed backend fields (e.g. education.gpa, education.coursework) are kept
    on `_raw` and spread back in on save so editing one field never wipes
    fields this form doesn't show.
 ═══════════════════════════════════════════════════ */
@@ -243,12 +244,12 @@ const SECTION_ADAPTERS = {
     backendKey: 'projects',
     toItems: (profile) => (profile.projects || []).map((p, i) => ({
       _id: `proj-${i}`, _raw: p,
-      'Project Name': p.name || '', 'Link': p.repo || p.live || '',
+      'Project Name': p.name || '', 'GitHub Repo': p.repo || '', 'Live Link': p.live || '',
       'Tech Stack': p.tech || '', 'Description': p.desc || '',
     })),
     fromItems: (items) => items.map((item) => ({
       ...(item._raw || {}),
-      name: item['Project Name'] || '', repo: item['Link'] || '',
+      name: item['Project Name'] || '', repo: item['GitHub Repo'] || '', live: item['Live Link'] || '',
       tech: item['Tech Stack'] || '', desc: item['Description'] || '',
     })),
   },
