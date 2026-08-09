@@ -182,15 +182,44 @@ export const updateMe = async (fields) => {
 /**
  * Uploads/replaces the signed-in user's avatar (candidate headshot or
  * company logo — both are just User.photoURL). Accepts a File from an
- * <input type="file">. Same boundary gotcha as saveProfile() above:
- * never hardcode the Content-Type here.
+ * <input type="file">.
+ *
+ * This goes straight from the browser to Cloudinary using a short-lived
+ * signature from our own backend, instead of sending the file through
+ * our server first — that two-hop path (browser → Render → Cloudinary)
+ * was the main reason uploads felt slow, especially on Render's
+ * free-tier bandwidth. Direct upload means the transfer speed is only
+ * ever bottlenecked by the user's own connection to Cloudinary.
  */
 export const uploadUserPhoto = async (file) => {
-  const form = new FormData();
-  form.append('photo', file);
-  const { data } = await api.post('/user/me/photo', form, {
-    headers: { 'Content-Type': undefined },
+  // 1. Ask our backend to authorize this upload (short-lived signature,
+  //    doesn't touch the file at all — just proves we're allowed to
+  //    upload to this folder under this account).
+  const { data: sigData } = await api.get('/user/me/photo-signature');
+  const { signature, timestamp, folder, publicId, apiKey, cloudName } = sigData.data;
+
+  // 2. Upload the file directly to Cloudinary. Must include exactly the
+  //    same params that were signed (folder, public_id, timestamp) or
+  //    Cloudinary rejects it as a signature mismatch.
+  const cloudForm = new FormData();
+  cloudForm.append('file', file);
+  cloudForm.append('api_key', apiKey);
+  cloudForm.append('timestamp', timestamp);
+  cloudForm.append('signature', signature);
+  cloudForm.append('folder', folder);
+  cloudForm.append('public_id', publicId);
+
+  const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: 'POST',
+    body: cloudForm,
   });
+  const cloudData = await cloudRes.json();
+  if (!cloudRes.ok) {
+    throw new Error(cloudData?.error?.message || 'Photo upload to Cloudinary failed.');
+  }
+
+  // 3. Tell our backend the resulting URL so it can save it on the user.
+  const { data } = await api.post('/user/me/photo', { photoURL: cloudData.secure_url });
   return data.data.user;
 };
 
@@ -207,18 +236,74 @@ export const deleteAccount = async (confirmText) => {
 };
 
 /* ── PROFILE ── */
+/**
+ * Uploads a file straight to Cloudinary from the browser, bypassing our
+ * backend entirely for the file bytes — only the resulting URL gets
+ * sent to our server. `signatureEndpoint` is one of our own API paths
+ * that returns a short-lived signed upload authorization (e.g.
+ * '/jobs/resume-signature', '/profile/cert-signature',
+ * '/jobs/attachment-signature?type=jobDescriptionPdf').
+ *
+ * Images upload to Cloudinary's `image/upload` endpoint; everything
+ * else (PDFs, DOC/DOCX) goes to `raw/upload` — Cloudinary treats these
+ * as fundamentally different asset types and rejects a mismatched one.
+ */
+const uploadFileToCloudinary = async (file, signatureEndpoint) => {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  const sep = signatureEndpoint.includes('?') ? '&' : '?';
+  const { data: sigData } = await api.get(`${signatureEndpoint}${sep}ext=${encodeURIComponent(ext)}`);
+  const { signature, timestamp, folder, publicId, apiKey, cloudName } = sigData.data;
+
+  const resourceType = file.type.startsWith('image/') ? 'image' : 'raw';
+
+  const cloudForm = new FormData();
+  cloudForm.append('file', file);
+  cloudForm.append('api_key', apiKey);
+  cloudForm.append('timestamp', timestamp);
+  cloudForm.append('signature', signature);
+  cloudForm.append('folder', folder);
+  cloudForm.append('public_id', publicId);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
+    method: 'POST',
+    body: cloudForm,
+  });
+  const result = await res.json();
+  if (!res.ok) {
+    throw new Error(result?.error?.message || 'File upload failed.');
+  }
+  return { url: result.secure_url, originalName: file.name };
+};
+
 export const getProfile = async () => {
   const { data } = await api.get('/profile');
   return data.data.profile;
 };
 
 export const saveProfile = async (profileData, photoFile = null, certFiles = {}, isComplete = false) => {
+  // Cert PDFs upload straight to Cloudinary first — only the resulting
+  // URL rides along in the JSON payload below. Photo upload is
+  // unchanged (still goes through our server as multipart), since it's
+  // small enough that the extra hop isn't the bottleneck certs/resumes
+  // were.
+  const certEntries = Object.entries(certFiles).filter(([, file]) => file);
+  const uploadedCerts = await Promise.all(
+    certEntries.map(([idx, file]) => uploadFileToCloudinary(file, '/profile/cert-signature').then((res) => [idx, res]))
+  );
+  const certsWithUrls = { ...profileData };
+  if (uploadedCerts.length && Array.isArray(certsWithUrls.certs)) {
+    certsWithUrls.certs = [...certsWithUrls.certs];
+    uploadedCerts.forEach(([idx, { url }]) => {
+      const i = Number(idx);
+      if (certsWithUrls.certs[i]) {
+        certsWithUrls.certs[i] = { ...certsWithUrls.certs[i], certPdfUrl: url };
+      }
+    });
+  }
+
   const form = new FormData();
-  form.append('data', JSON.stringify({ ...profileData, isComplete }));
+  form.append('data', JSON.stringify({ ...certsWithUrls, isComplete }));
   if (photoFile) form.append('photo', photoFile);
-  Object.entries(certFiles).forEach(([idx, file]) => {
-    if (file) form.append(`certPdf_${idx}`, file);
-  });
   // IMPORTANT: don't set 'Content-Type': 'multipart/form-data' manually.
   // A FormData body needs a boundary in that header (e.g.
   // "multipart/form-data; boundary=----abc123"), which only the browser
@@ -309,18 +394,25 @@ export const getJob = async (id) => {
 };
 
 /**
- * Jobs are always sent as multipart/form-data now, since the posting
- * form carries two optional PDF attachments (job description, company
- * brochure). The plain job fields ride along as a single stringified
- * `data` field; `files` is an optional { jobDescriptionPdf, companyBrochurePdf }
- * map of File objects — only pass the ones the user actually picked.
+ * Jobs are sent as plain JSON now — the two optional PDF attachments
+ * (job description, company brochure) upload straight to Cloudinary
+ * first, and only their resulting URLs ride along in the body.
+ * `files` is an optional { jobDescriptionPdf, companyBrochurePdf } map
+ * of File objects — only pass the ones the user actually picked.
  */
-const buildJobForm = (jobData, files = {}) => {
-  const form = new FormData();
-  form.append('data', JSON.stringify(jobData));
-  if (files.jobDescriptionPdf) form.append('jobDescriptionPdf', files.jobDescriptionPdf);
-  if (files.companyBrochurePdf) form.append('companyBrochurePdf', files.companyBrochurePdf);
-  return form;
+const buildJobPayload = async (jobData, files = {}) => {
+  const attachments = {};
+  if (files.jobDescriptionPdf) {
+    attachments.jobDescriptionPdf = await uploadFileToCloudinary(
+      files.jobDescriptionPdf, '/jobs/attachment-signature?type=jobDescriptionPdf'
+    );
+  }
+  if (files.companyBrochurePdf) {
+    attachments.companyBrochurePdf = await uploadFileToCloudinary(
+      files.companyBrochurePdf, '/jobs/attachment-signature?type=companyBrochurePdf'
+    );
+  }
+  return Object.keys(attachments).length ? { ...jobData, attachments } : jobData;
 };
 
 /**
@@ -329,11 +421,8 @@ const buildJobForm = (jobData, files = {}) => {
  * validates the listing is complete before publishing).
  */
 export const createJob = async (jobData, files = {}) => {
-  // See the comment in saveProfile() above — never hardcode this header
-  // for a FormData body, it strips out the boundary the server needs.
-  const { data } = await api.post('/jobs', buildJobForm(jobData, files), {
-    headers: { 'Content-Type': undefined },
-  });
+  const payload = await buildJobPayload(jobData, files);
+  const { data } = await api.post('/jobs', payload);
   return data.data.job;
 };
 
@@ -343,9 +432,8 @@ export const createJob = async (jobData, files = {}) => {
  * or close an active listing by sending status: 'closed').
  */
 export const updateJob = async (id, jobData, files = {}) => {
-  const { data } = await api.patch(`/jobs/${id}`, buildJobForm(jobData, files), {
-    headers: { 'Content-Type': undefined },
-  });
+  const payload = await buildJobPayload(jobData, files);
+  const { data } = await api.patch(`/jobs/${id}`, payload);
   return data.data.job;
 };
 
@@ -393,15 +481,16 @@ export const getPublicJob = async (id) => {
  * Submits an application. `payload` carries the employer-question
  * answers plus `consent` (bool) and `shareProfileAsResume` (bool).
  * `resumeFile` is optional — pass it when the candidate uploaded their
- * own resume instead of sharing their SkillSphere profile.
+ * own resume instead of sharing their SkillSphere profile. It uploads
+ * straight to Cloudinary first; only the resulting URL is sent here.
  */
 export const applyToJob = async (jobId, payload, resumeFile = null) => {
-  const form = new FormData();
-  form.append('data', JSON.stringify(payload));
-  if (resumeFile) form.append('resume', resumeFile);
-  const { data } = await api.post(`/jobs/applications/${jobId}/apply`, form, {
-    headers: { 'Content-Type': undefined },
-  });
+  let body = payload;
+  if (resumeFile) {
+    const resume = await uploadFileToCloudinary(resumeFile, '/jobs/resume-signature');
+    body = { ...payload, resume };
+  }
+  const { data } = await api.post(`/jobs/applications/${jobId}/apply`, body);
   return data.data.job;
 };
 

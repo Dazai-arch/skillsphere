@@ -59,24 +59,30 @@ const buildSalary = (body, existing) => {
   };
 };
 
-// Multer (upload.fields) hands us `req.files = { jobDescriptionPdf: [file], companyBrochurePdf: [file] }`.
-// Only the fields that actually arrived with a new file get overwritten —
+// The frontend now uploads attachment PDFs straight to Cloudinary and
+// sends back `{ jobDescriptionPdf: { url, originalName }, companyBrochurePdf: {...} }`
+// in body.attachments — no file ever passes through this server. Only
+// the fields that actually arrived with a new URL get overwritten —
 // re-saving a job without re-uploading keeps whatever was there before.
-const buildAttachments = (files, existing) => {
+const buildAttachments = (body, existing) => {
   const attachments = {
     jobDescriptionPdf:  existing?.jobDescriptionPdf  || { url: null, originalName: null },
     companyBrochurePdf: existing?.companyBrochurePdf || { url: null, originalName: null },
   };
 
-  if (files?.jobDescriptionPdf?.[0]) {
-    const f = files.jobDescriptionPdf[0];
-    // `f.path` is set by multer-storage-cloudinary to the asset's full
-    // https secure_url — already fetchable from anywhere.
-    attachments.jobDescriptionPdf = { url: f.path, originalName: f.originalname };
+  const incoming = body?.attachments || {};
+
+  if (incoming.jobDescriptionPdf?.url) {
+    attachments.jobDescriptionPdf = {
+      url: incoming.jobDescriptionPdf.url,
+      originalName: incoming.jobDescriptionPdf.originalName || null,
+    };
   }
-  if (files?.companyBrochurePdf?.[0]) {
-    const f = files.companyBrochurePdf[0];
-    attachments.companyBrochurePdf = { url: f.path, originalName: f.originalname };
+  if (incoming.companyBrochurePdf?.url) {
+    attachments.companyBrochurePdf = {
+      url: incoming.companyBrochurePdf.url,
+      originalName: incoming.companyBrochurePdf.originalName || null,
+    };
   }
 
   return attachments;
@@ -116,10 +122,10 @@ const getOne = async (companyId, jobId) => {
   return job.toPublic();
 };
 
-const create = async (companyId, body, files) => {
+const create = async (companyId, body) => {
   const fields = pickFields(body);
   fields.salary = buildSalary(body, null);
-  fields.attachments = buildAttachments(files, null);
+  fields.attachments = buildAttachments(body, null);
 
   const status = body.status === 'active' ? 'active' : 'draft';
   if (status === 'active') validateForPublish(fields);
@@ -140,14 +146,14 @@ const create = async (companyId, body, files) => {
   return job.toPublic();
 };
 
-const update = async (companyId, jobId, body, files) => {
+const update = async (companyId, jobId, body) => {
   const job = await Job.findOne({ _id: jobId, companyId }).catch(() => null);
   if (!job) throw new AppError('Job not found.', 404);
 
   const fields = pickFields(body);
   Object.assign(job, fields);
   job.salary = buildSalary(body, job.salary);
-  job.attachments = buildAttachments(files, job.attachments);
+  job.attachments = buildAttachments(body, job.attachments);
 
   const wasActive  = job.status === 'active';
   const nextStatus = ['draft', 'active', 'closed'].includes(body.status) ? body.status : job.status;
@@ -235,7 +241,7 @@ const getPublicOne = async (candidateId, jobId) => {
 };
 
 /* POST /api/jobs/:id/apply */
-const applyToJob = async (candidate, jobId, body, file) => {
+const applyToJob = async (candidate, jobId, body) => {
   const job = await Job.findById(jobId).catch(() => null);
   if (!job) throw new AppError('Job not found.', 404);
 
@@ -253,14 +259,14 @@ const applyToJob = async (candidate, jobId, body, file) => {
 
   const shareProfile = body.shareProfileAsResume === true || body.shareProfileAsResume === 'true';
 
+  // The frontend now uploads the resume straight to Cloudinary and sends
+  // back `{ url, originalName }` in body.resume — no file passes through
+  // this server at all.
   let resumeSource, resumeUrl, resumeName;
-  if (file) {
+  if (body.resume?.url) {
     resumeSource = 'upload';
-    // `file.path` is set by multer-storage-cloudinary to the asset's
-    // full https secure_url — already fetchable from anywhere, no
-    // BASE_URL prefixing needed on the frontend.
-    resumeUrl    = file.path;
-    resumeName   = file.originalname;
+    resumeUrl    = body.resume.url;
+    resumeName   = body.resume.originalName || null;
   } else if (shareProfile) {
     resumeSource = 'profile';
     resumeUrl    = null;

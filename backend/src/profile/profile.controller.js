@@ -6,7 +6,23 @@ const User      = require('../user/user.model');
 const AppError  = require('../utils/AppError');
 const { sendSuccess } = require('../utils/response');
 const { deleteUploadedFile } = require('../utils/fileCleanup');
+const { signUpload, buildPublicId } = require('../utils/cloudinarySign');
 const path      = require('path');
+
+/* GET /api/profile/cert-signature?ext=pdf
+   Authorizes a direct browser → Cloudinary upload for a certification
+   PDF, so the file never passes through this server (same pattern as
+   the resume/avatar/job-attachment signature endpoints). */
+const getCertSignature = async (req, res, next) => {
+  try {
+    const ext = (req.query.ext || 'pdf').toString();
+    const publicId = buildPublicId(req.user._id, 'cert', ext);
+    const signed = signUpload({ folder: 'skillsphere/certs', publicId });
+    sendSuccess(res, { data: signed });
+  } catch (err) {
+    next(err);
+  }
+};
 
 /* ── GET /api/profile ── */
 const getProfile = async (req, res, next) => {
@@ -66,23 +82,10 @@ const updateProfile = async (req, res, next) => {
       deleteUploadedFile(previousPhotoUrl);
     }
 
-    // Handle cert PDF uploads — keyed by certIndex.
-    // Same rule: merge into the `certs` array elements instead of using
-    // dotted 'certs.N.certPdfUrl' paths alongside the whole `certs` array.
-    if (req.files) {
-      Object.keys(req.files).forEach(key => {
-        const match = key.match(/^certPdf_(\d+)$/);
-        if (match) {
-          const idx = parseInt(match[1]);
-          if (Array.isArray(update.certs) && update.certs[idx]) {
-            update.certs[idx] = {
-              ...update.certs[idx],
-              certPdfUrl: req.files[key][0].path,
-            };
-          }
-        }
-      });
-    }
+    // Cert PDFs now arrive with `certPdfUrl` already set on each cert
+    // object in `update.certs` — the frontend uploads them straight to
+    // Cloudinary (via GET /api/profile/cert-signature) before this
+    // request is even sent, so there's nothing to extract from files here.
 
     // If this is a final submit mark complete and update user flag
     if (isComplete === true) {
@@ -104,4 +107,4 @@ const updateProfile = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getProfile, updateProfile };
+module.exports = { getProfile, updateProfile, getCertSignature };

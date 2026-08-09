@@ -10,6 +10,37 @@
 const jobService      = require('./job.service');
 const { sendSuccess } = require('../utils/response');
 const AppError         = require('../utils/AppError');
+const { signUpload, buildPublicId } = require('../utils/cloudinarySign');
+
+/* GET /api/jobs/resume-signature?ext=pdf
+   Authorizes a direct browser → Cloudinary upload for a resume, so the
+   file bytes never pass through this server (same reasoning as the
+   avatar-signature endpoint in user.controller.js — this was the slow
+   two-hop path on Render's free tier). */
+const getResumeSignature = async (req, res, next) => {
+  try {
+    const ext = (req.query.ext || 'pdf').toString();
+    const publicId = buildPublicId(req.user._id, 'resume', ext);
+    const signed = signUpload({ folder: 'skillsphere/resumes', publicId });
+    sendSuccess(res, { data: signed });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/* GET /api/jobs/attachment-signature?type=jobDescriptionPdf&ext=pdf
+   Same idea, for the two optional job-posting PDF attachments. */
+const getAttachmentSignature = async (req, res, next) => {
+  try {
+    const type = (req.query.type || 'attachment').toString();
+    const ext  = (req.query.ext || 'pdf').toString();
+    const publicId = buildPublicId(req.user._id, type, ext);
+    const signed = signUpload({ folder: 'skillsphere/job-attachments', publicId });
+    sendSuccess(res, { data: signed });
+  } catch (err) {
+    next(err);
+  }
+};
 
 const parseBody = (req) => {
   if (typeof req.body.data === 'string') {
@@ -46,7 +77,7 @@ const getJob = async (req, res, next) => {
 const createJob = async (req, res, next) => {
   try {
     const body = parseBody(req);
-    const job = await jobService.create(req.user._id, body, req.files);
+    const job = await jobService.create(req.user._id, body);
     sendSuccess(res, {
       statusCode: 201,
       message:    job.status === 'active' ? 'Job published successfully.' : 'Draft saved.',
@@ -61,7 +92,7 @@ const createJob = async (req, res, next) => {
 const updateJob = async (req, res, next) => {
   try {
     const body = parseBody(req);
-    const job = await jobService.update(req.user._id, req.params.id, body, req.files);
+    const job = await jobService.update(req.user._id, req.params.id, body);
     sendSuccess(res, {
       message: job.status === 'active' ? 'Job published successfully.' : 'Job updated.',
       data:    { job },
@@ -105,11 +136,10 @@ const getPublicJob = async (req, res, next) => {
   }
 };
 
-/* POST /api/jobs/:id/apply — multipart, optional `resume` file */
+/* POST /api/jobs/:id/apply — JSON body, resume already uploaded to Cloudinary */
 const applyJob = async (req, res, next) => {
   try {
-    const body = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
-    const job  = await jobService.applyToJob(req.user, req.params.id, body, req.file);
+    const job  = await jobService.applyToJob(req.user, req.params.id, req.body);
     sendSuccess(res, { statusCode: 201, message: 'Application submitted successfully.', data: { job } });
   } catch (err) {
     next(err);
@@ -201,4 +231,5 @@ module.exports = {
   listPublicJobs, getPublicJob, applyJob, listMyApplications, listRecommendedJobs,
   toggleBookmark, listBookmarkedJobs,
   listApplicants, getApplicantProfile, updateApplicantStatus,
+  getResumeSignature, getAttachmentSignature,
 };

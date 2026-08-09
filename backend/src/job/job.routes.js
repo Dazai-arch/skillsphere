@@ -1,86 +1,17 @@
 /**
  * src/job/job.routes.js
+ *
+ * Every file upload (resumes, job attachments) now goes straight from
+ * the browser to Cloudinary using a short-lived signature from the
+ * *-signature routes below — no multer, no file ever touches this
+ * server. See job.controller.js for the signing logic and
+ * job.service.js for where the resulting URLs get saved.
  */
 const { Router } = require('express');
-const multer      = require('multer');
-const path        = require('path');
-// Handles both export shapes across versions of this package: v3+ exports
-// { CloudinaryStorage }, v1/v2 export the class directly as module.exports.
-const multerStorageCloudinary = require('multer-storage-cloudinary');
-const CloudinaryStorage = multerStorageCloudinary.CloudinaryStorage || multerStorageCloudinary;
-const cloudinary  = require('../config/cloudinary');
 const { authenticate, authorize } = require('../auth/auth.middleware');
-const AppError    = require('../utils/AppError');
 const controller  = require('./job.controller');
 
 const router = Router();
-
-/* ── Storage for the two optional job attachments (job description PDF,
-   company brochure PDF). Pushed to Cloudinary instead of local disk —
-   same reason as resumes: Render's filesystem is wiped on every deploy
-   and restart, so anything saved to disk silently disappears. ── */
-const attachmentStorage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => ({
-    folder:        'skillsphere/job-attachments',
-    resource_type: 'raw', // PDFs aren't images
-    public_id:     `${req.user?._id || 'anon'}-${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`,
-  }),
-});
-
-const fileFilter = (_req, file, cb) => {
-  if (file.mimetype !== 'application/pdf') {
-    return cb(new AppError('Only PDF files are allowed for job attachments.', 400));
-  }
-  cb(null, true);
-};
-
-const upload = multer({
-  storage: attachmentStorage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB, matches the "Max size 5MB" copy in the UI
-});
-
-const attachmentUpload = upload.fields([
-  { name: 'jobDescriptionPdf', maxCount: 1 },
-  { name: 'companyBrochurePdf', maxCount: 1 },
-]);
-
-/* ── Storage for candidate resume uploads (apply flow). Resumes are
-   pushed straight to Cloudinary instead of local disk, so they survive
-   deploys/restarts and can be fetched from anywhere via a plain https
-   URL. `resource_type: 'raw'` is used because PDFs/DOC/DOCX aren't
-   images — Cloudinary would otherwise try (and fail) to treat them as
-   one. Looser file-type filter than the company attachments above,
-   since resumes come as PDF/DOC/DOCX and are capped at 2MB (matches
-   the "less than 2MB" copy in the apply modal). ── */
-const RESUME_MIME_TYPES = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-];
-
-const resumeStorage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => ({
-    folder:        'skillsphere/resumes',
-    resource_type: 'raw',
-    // Keep the original extension in the stored public_id so the file
-    // opens correctly (Cloudinary raw assets don't infer a format).
-    public_id:     `${req.user?._id || 'anon'}-${Date.now()}${path.extname(file.originalname)}`,
-  }),
-});
-
-const resumeUpload = multer({
-  storage: resumeStorage,
-  fileFilter: (_req, file, cb) => {
-    if (!RESUME_MIME_TYPES.includes(file.mimetype)) {
-      return cb(new AppError('Resume must be a PDF, DOC or DOCX file.', 400));
-    }
-    cb(null, true);
-  },
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
-});
 
 /* ── Candidate-facing routes ──
    Registered before the company-only `router.use` guard below, so each
@@ -103,10 +34,14 @@ router.get(
   authenticate, authorize('candidate'),
   controller.getPublicJob
 );
+router.get(
+  '/resume-signature',
+  authenticate, authorize('candidate'),
+  controller.getResumeSignature
+);
 router.post(
   '/applications/:id/apply',
   authenticate, authorize('candidate'),
-  resumeUpload.single('resume'),
   controller.applyJob
 );
 router.get(
@@ -128,10 +63,11 @@ router.post(
 // Every remaining job-posting route belongs to a company managing its own listings.
 router.use(authenticate, authorize('company'));
 
+router.get   ('/attachment-signature', controller.getAttachmentSignature);
 router.get   ('/',    controller.listJobs);
-router.post  ('/',    attachmentUpload, controller.createJob);
+router.post  ('/',    controller.createJob);
 router.get   ('/:id', controller.getJob);
-router.patch ('/:id', attachmentUpload, controller.updateJob);
+router.patch ('/:id', controller.updateJob);
 router.delete('/:id', controller.deleteJob);
 
 /* ── Applicant pipeline (viewing/managing candidates who applied) ── */

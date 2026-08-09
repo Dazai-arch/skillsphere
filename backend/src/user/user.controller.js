@@ -3,6 +3,7 @@ const Profile         = require('../profile/profile.model');
 const AppError        = require('../utils/AppError');
 const { sendSuccess } = require('../utils/response');
 const { deleteUploadedFile } = require('../utils/fileCleanup');
+const cloudinary      = require('../config/cloudinary');
 
 /* ════════════════════════════════════════════════
    GET /api/user/me
@@ -71,25 +72,60 @@ const updateMe = async (req, res, next) => {
 };
 
 /* ════════════════════════════════════════════════
+   GET /api/user/me/photo-signature
+   Authorizes a direct browser → Cloudinary upload. The browser used to
+   send the raw file through this server, which then re-uploaded it to
+   Cloudinary — a slow two-hop path, especially over Render's free-tier
+   bandwidth. Now the server only ever signs a short-lived upload
+   request; the actual file bytes go straight from the browser to
+   Cloudinary and never touch this server at all.
+════════════════════════════════════════════════ */
+const getPhotoSignature = async (req, res, next) => {
+  try {
+    const timestamp = Math.round(Date.now() / 1000);
+    const folder     = 'skillsphere/avatars';
+    const public_id   = `${req.user._id}-${Date.now()}`;
+
+    // Only these params (plus the secret) go into the signature —
+    // whatever the client sends to Cloudinary must match exactly, or
+    // Cloudinary rejects the upload. Keeps the client from being able
+    // to smuggle in a different folder/public_id than the one we meant.
+    const paramsToSign = { timestamp, folder, public_id };
+    const signature = cloudinary.utils.api_sign_request(paramsToSign, process.env.CLOUDINARY_API_SECRET);
+
+    sendSuccess(res, {
+      data: {
+        signature,
+        timestamp,
+        folder,
+        publicId: public_id,
+        apiKey:   process.env.CLOUDINARY_API_KEY,
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/* ════════════════════════════════════════════════
    POST /api/user/me/photo
-   Uploads/replaces the signed-in user's avatar (candidate headshot
-   or company logo — both just live on User.photoURL). Multer has
-   already written the file to /uploads and attached it as req.file
-   by the time this runs.
+   Saves the avatar URL after the browser has already uploaded the
+   file directly to Cloudinary using the signature above. No file
+   passes through this server — just the resulting secure_url.
 ════════════════════════════════════════════════ */
 const uploadPhoto = async (req, res, next) => {
   try {
-    if (!req.file) {
-      return next(new AppError('No image file was uploaded. Use JPEG, PNG or WebP under 5MB.', 400));
+    const { photoURL } = req.body;
+    if (!photoURL || typeof photoURL !== 'string' || !photoURL.startsWith('https://res.cloudinary.com/')) {
+      return next(new AppError('A valid Cloudinary photo URL is required.', 400));
     }
 
     const user = await User.findById(req.user._id);
     if (!user) return next(new AppError('User not found.', 404));
 
     const previousPhotoUrl = user.photoURL || '';
-    // `req.file.path` is set by multer-storage-cloudinary to the asset's
-    // full https secure_url — already fetchable from anywhere.
-    user.photoURL = req.file.path;
+    user.photoURL = photoURL;
     await user.save();
 
     // Clean up the file this one just replaced (if it was one of ours —
@@ -169,4 +205,4 @@ const deleteMe = async (req, res, next) => {
   }
 };
 
-module.exports = { getMe, updateMe, deleteMe, uploadPhoto, removePhoto };
+module.exports = { getMe, updateMe, deleteMe, uploadPhoto, removePhoto, getPhotoSignature };
