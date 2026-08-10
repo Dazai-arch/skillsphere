@@ -267,6 +267,12 @@ const uploadFileToCloudinary = async (file, signatureEndpoint) => {
   cloudForm.append('folder', folder);
   cloudForm.append('public_id', publicId);
 
+  // TEMP DEBUG — remove once the upload-preset issue is diagnosed.
+  for (const [k, v] of cloudForm.entries()) {
+    console.log('[cloudinary formdata]', k, v instanceof File ? `File(${v.name})` : v);
+  }
+  console.log('[cloudinary upload url]', `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`);
+
   const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
     method: 'POST',
     body: cloudForm,
