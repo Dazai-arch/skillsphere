@@ -753,7 +753,10 @@ export default function ProfilePage() {
   const personal = profile?.personal || {};
   const initials = (personal.fullName || '')
     .split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '—';
-  const photoSrc = personal.photoUrl ? `${BASE_URL}${personal.photoUrl}` : null;
+  // photoUrl is now always an absolute Cloudinary URL (https://res.cloudinary.com/...)
+  // post-migration — don't prefix it with BASE_URL, that only applied to the old
+  // relative /uploads/... paths and would otherwise produce a broken URL.
+  const photoSrc = personal.photoUrl || null;
 
   if (loadingProfile) {
     return (

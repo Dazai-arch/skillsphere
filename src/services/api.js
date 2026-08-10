@@ -254,6 +254,9 @@ const uploadFileToCloudinary = async (file, signatureEndpoint) => {
   const { data: sigData } = await api.get(`${signatureEndpoint}${sep}ext=${encodeURIComponent(ext)}`);
   const { signature, timestamp, folder, publicId, apiKey, cloudName } = sigData.data;
 
+  // TEMP DEBUG — remove once the upload-preset issue is diagnosed.
+  console.log('[cloudinary signature debug]', { signature, timestamp, folder, publicId, apiKey, cloudName });
+
   const resourceType = file.type.startsWith('image/') ? 'image' : 'raw';
 
   const cloudForm = new FormData();
