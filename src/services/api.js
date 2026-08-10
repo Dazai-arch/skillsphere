@@ -254,9 +254,6 @@ const uploadFileToCloudinary = async (file, signatureEndpoint) => {
   const { data: sigData } = await api.get(`${signatureEndpoint}${sep}ext=${encodeURIComponent(ext)}`);
   const { signature, timestamp, folder, publicId, apiKey, cloudName } = sigData.data;
 
-  // TEMP DEBUG — remove once the upload-preset issue is diagnosed.
-  console.log('[cloudinary signature debug]', { signature, timestamp, folder, publicId, apiKey, cloudName });
-
   const resourceType = file.type.startsWith('image/') ? 'image' : 'raw';
 
   const cloudForm = new FormData();
@@ -266,12 +263,6 @@ const uploadFileToCloudinary = async (file, signatureEndpoint) => {
   cloudForm.append('signature', signature);
   cloudForm.append('folder', folder);
   cloudForm.append('public_id', publicId);
-
-  // TEMP DEBUG — remove once the upload-preset issue is diagnosed.
-  for (const [k, v] of cloudForm.entries()) {
-    console.log('[cloudinary formdata]', k, v instanceof File ? `File(${v.name})` : v);
-  }
-  console.log('[cloudinary upload url]', `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`);
 
   const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
     method: 'POST',
@@ -290,41 +281,36 @@ export const getProfile = async () => {
 };
 
 export const saveProfile = async (profileData, photoFile = null, certFiles = {}, isComplete = false) => {
-  // Cert PDFs upload straight to Cloudinary first — only the resulting
-  // URL rides along in the JSON payload below. Photo upload is
-  // unchanged (still goes through our server as multipart), since it's
-  // small enough that the extra hop isn't the bottleneck certs/resumes
-  // were.
+  // Photo and cert PDFs both upload straight to Cloudinary first — only
+  // the resulting URLs ride along in the JSON payload below. This used
+  // to go through our server as multipart/form-data (multer), which was
+  // the slow two-hop path behind the original "upload taking forever"
+  // issue.
   const certEntries = Object.entries(certFiles).filter(([, file]) => file);
-  const uploadedCerts = await Promise.all(
-    certEntries.map(([idx, file]) => uploadFileToCloudinary(file, '/profile/cert-signature').then((res) => [idx, res]))
-  );
-  const certsWithUrls = { ...profileData };
-  if (uploadedCerts.length && Array.isArray(certsWithUrls.certs)) {
-    certsWithUrls.certs = [...certsWithUrls.certs];
+  const [uploadedCerts, uploadedPhoto] = await Promise.all([
+    Promise.all(
+      certEntries.map(([idx, file]) => uploadFileToCloudinary(file, '/profile/cert-signature').then((res) => [idx, res]))
+    ),
+    photoFile ? uploadFileToCloudinary(photoFile, '/profile/photo-signature') : Promise.resolve(null),
+  ]);
+
+  const payload = { ...profileData, isComplete };
+
+  if (uploadedCerts.length && Array.isArray(payload.certs)) {
+    payload.certs = [...payload.certs];
     uploadedCerts.forEach(([idx, { url }]) => {
       const i = Number(idx);
-      if (certsWithUrls.certs[i]) {
-        certsWithUrls.certs[i] = { ...certsWithUrls.certs[i], certPdfUrl: url };
+      if (payload.certs[i]) {
+        payload.certs[i] = { ...payload.certs[i], certPdfUrl: url };
       }
     });
   }
 
-  const form = new FormData();
-  form.append('data', JSON.stringify({ ...certsWithUrls, isComplete }));
-  if (photoFile) form.append('photo', photoFile);
-  // IMPORTANT: don't set 'Content-Type': 'multipart/form-data' manually.
-  // A FormData body needs a boundary in that header (e.g.
-  // "multipart/form-data; boundary=----abc123"), which only the browser
-  // can generate. Setting the header ourselves — even to the "right"
-  // string — blocks axios/the browser from ever adding that boundary,
-  // so the server's multipart parser (multer) can't split the request
-  // into fields/files and every upload silently fails. Explicitly
-  // clearing the header (this instance defaults to 'application/json')
-  // lets the browser set the correct one itself.
-  const { data } = await api.patch('/profile', form, {
-    headers: { 'Content-Type': undefined },
-  });
+  if (uploadedPhoto) {
+    payload.personal = { ...(payload.personal || {}), photoUrl: uploadedPhoto.url };
+  }
+
+  const { data } = await api.patch('/profile', payload);
   return data.data.profile;
 };
 
