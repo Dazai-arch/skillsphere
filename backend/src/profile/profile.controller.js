@@ -35,10 +35,26 @@ const getProfile = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+/* GET /api/profile/photo-signature?ext=jpg
+   Same direct-to-Cloudinary pattern as cert-signature above, now used
+   for the profile photo too — this used to go through multer on this
+   server, which was the slow two-hop path (same root cause as the
+   avatar and resume fixes earlier). */
+const getPhotoSignature = async (req, res, next) => {
+  try {
+    const ext = (req.query.ext || 'jpg').toString();
+    const publicId = buildPublicId(req.user._id, 'profile-photo', ext);
+    const signed = signUpload({ folder: 'skillsphere/avatars', publicId });
+    sendSuccess(res, { data: signed });
+  } catch (err) {
+    next(err);
+  }
+};
+
 /* ── PATCH /api/profile (autosave + final submit) ── */
 const updateProfile = async (req, res, next) => {
   try {
-    const body = JSON.parse(req.body.data || '{}');
+    const body = req.body || {};
     const { isComplete, ...rest } = body;
 
     const update = { ...rest, lastAutosavedAt: new Date() };
@@ -50,34 +66,19 @@ const updateProfile = async (req, res, next) => {
     const existing = await Profile.findOne({ userId: req.user._id }).select('personal').lean();
     const previousPhotoUrl = existing?.personal?.photoUrl || '';
 
-    // Handle photo upload — merge into the `personal` object itself,
-    // don't set a dotted 'personal.photoUrl' path alongside the whole
-    // `personal` object (Mongo rejects writing to a parent + child path
-    // in the same $set).
-    //
-    // IMPORTANT: a photo-only save (no `personal` in the request body,
-    // e.g. just changing the avatar) used to overwrite the whole
-    // `personal` subdocument with just { photoUrl }, silently wiping
-    // fullName/title/etc. Load the existing document first so we always
-    // merge on top of what's actually saved, not just what this request sent.
-    if (req.files?.photo?.[0]) {
-      update.personal = {
-        ...(existing?.personal || {}),
-        ...(update.personal || {}),
-        // `req.files.photo[0].path` is set by multer-storage-cloudinary
-        // to the asset's full https secure_url.
-        photoUrl: req.files.photo[0].path,
-      };
-    } else if (update.personal && !update.personal.photoUrl) {
-      // Candidate explicitly removed their photo — the frontend sends
-      // back the full `personal` object with photoUrl cleared. Make
-      // sure that actually lands as '' rather than being dropped.
-      update.personal = { ...update.personal, photoUrl: '' };
+    // The photo (like every other `personal` field) now arrives already
+    // set in `update.personal` — the frontend uploads it straight to
+    // Cloudinary first, then sends the resulting URL merged into
+    // `personal` here. We still merge onto the existing doc defensively
+    // in case a caller ever sends a partial `personal` object, since
+    // Mongo would otherwise wipe fullName/title/etc. on a photo-only save.
+    if (update.personal) {
+      update.personal = { ...(existing?.personal || {}), ...update.personal };
     }
 
-    // Clean up the old file on disk whenever this request changes the
-    // photo (new upload replacing one, or an explicit removal), so
-    // /uploads doesn't accumulate orphaned files.
+    // Clean up the old file whenever this request changes the photo
+    // (new upload replacing one, or an explicit removal), so Cloudinary
+    // doesn't accumulate orphaned assets.
     if (update.personal && previousPhotoUrl && previousPhotoUrl !== update.personal.photoUrl) {
       deleteUploadedFile(previousPhotoUrl);
     }
@@ -107,4 +108,4 @@ const updateProfile = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getProfile, updateProfile, getCertSignature };
+module.exports = { getProfile, updateProfile, getCertSignature, getPhotoSignature };
