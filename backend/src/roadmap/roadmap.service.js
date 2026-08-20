@@ -19,7 +19,11 @@ const AppError = require('../utils/AppError');
 const Roadmap  = require('./roadmap.model');
 
 const GROQ_API      = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL     = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+// llama-3.3-70b-versatile was deprecated by Groq on 2026-06-17 and is now
+// decommissioned (returns 400 model_decommissioned), which surfaced here as
+// a 502 on every /roadmap/generate call. openai/gpt-oss-120b is Groq's
+// recommended replacement. Override via GROQ_MODEL if needed.
+const GROQ_MODEL     = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 const MAX_ATTEMPTS   = 3;
 
 const ALLOWED_LEVELS = new Set(['Foundational', 'Intermediate', 'Advanced', 'Mastery']);
