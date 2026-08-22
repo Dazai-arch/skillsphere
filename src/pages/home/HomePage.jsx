@@ -851,8 +851,10 @@ const USE_CASES = [
 function UseCases() {
   const [ref, vis] = useInView(0.12);
   return (
-    <div ref={ref} style={{ position:'relative', padding:'64px 24px', borderTop:'1px solid var(--divider)', borderBottom:'1px solid var(--divider)', background:'var(--bg-page)' }}>
-      <div style={{ maxWidth:1400, margin:'0 auto' }}>
+    <div ref={ref} style={{ position:'relative', padding:'64px 24px', borderTop:'1px solid var(--divider)', borderBottom:'1px solid var(--divider)', overflow:'hidden' }}>
+      <div style={{ position:'absolute', top:'-15%', right:'-8%', width:520, height:520, filter:'blur(120px)', borderRadius:'50%', background:'radial-gradient(ellipse,rgba(34,211,238,0.09),transparent 70%)', pointerEvents:'none' }}/>
+      <div style={{ position:'absolute', bottom:'-15%', left:'-8%', width:480, height:480, filter:'blur(110px)', borderRadius:'50%', background:'radial-gradient(ellipse,rgba(167,139,250,0.08),transparent 70%)', pointerEvents:'none' }}/>
+      <div style={{ maxWidth:1400, margin:'0 auto', position:'relative', zIndex:1 }}>
         <div style={{ opacity:vis?1:0, transform:vis?'none':'translateY(24px)', transition:'opacity 0.65s ease,transform 0.65s ease', marginBottom:48, textAlign:'center' }}>
           <SectionLabel color="#22d3ee">Perfect for Every Team</SectionLabel>
           <h2 style={{ fontSize:'clamp(2rem,4vw,3.5rem)', fontWeight:800, letterSpacing:'-0.02em', lineHeight:1.2, marginBottom:18, color:'#22d3ee', textAlign:'center', animation:'headingReveal 0.8s ease 0.4s both', wordBreak:'break-word' }}>
@@ -864,19 +866,19 @@ function UseCases() {
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:14 }}>
           {USE_CASES.map((uc,i)=>(
-            <div key={uc.title} style={{
+            <div key={uc.title} className="card-hover" style={{
               opacity:vis?1:0,
               transform:vis?'none':'translateY(20px)',
-              transition:`opacity 0.5s ease ${i*0.1}s,transform 0.5s ease ${i*0.1}s`,
               padding:'20px 18px',
               borderRadius:16,
               background:'var(--card-bg)',
               border:'1px solid var(--border-card)',
+              backdropFilter:'blur(12px)',
               display:'flex',
               flexDirection:'column',
               gap:10,
               cursor:'default',
-              transition:'border-color 0.3s ease'
+              transition:`opacity 0.5s ease ${i*0.1}s,transform 0.5s ease ${i*0.1}s,border-color 0.3s ease`
             }}
             onMouseEnter={e=>e.currentTarget.style.borderColor=uc.color+'45'}
             onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border-card)'}>
@@ -1161,12 +1163,8 @@ const FEATURES = [
     icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> },
   { title:'Auto-ranked pipeline', desc:'Every applicant arrives sorted. One-click advance, pass or schedule — your team focuses on decisions, not admin.', color:'#34d399',
     icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> },
-  { title:'Collaborative review', desc:'Share candidate profiles, add notes and align with your team — all in one place, with audit trails for every decision.', color:'#f472b6',
-    icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg> },
   { title:'Bias-reduction guardrails', desc:'Signal-based scoring removes demographic proxies. Redacted views and audit modes keep teams accountable.', color:'#fbbf24',
     icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg> },
-  { title:'Explainable AI', desc:'Every score shows its reasoning. Confidence levels are always displayed. No black boxes in your hiring decisions.', color:'#06b6d4',
-    icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg> },
 ];
 
 function Features() {
@@ -1218,8 +1216,6 @@ const PILLARS = [
     icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> },
   { title:'Built for velocity', desc:'Auto-sort on arrival, one-click shortlisting, integrated scheduling. Hiring moves as fast as your team can decide.', color:'#fbbf24',
     icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> },
-  { title:'Radically transparent AI', desc:'AI estimates are clearly labeled. Confidence levels are always shown. You always know what the system knows vs. what it inferred.', color:'#a78bfa',
-    icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg> },
 ];
 
 function Candidates() {
