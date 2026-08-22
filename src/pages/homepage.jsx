@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { Logo, SkillSphereLogo, SkillSphereWordmark } from '../../components/shared/Logo';
+import useTheme from '../../hooks/useTheme';
 
 /* ═══════════════════════════════════════════════════════
    GLOBAL STYLES
@@ -275,39 +277,8 @@ function useMousePosition() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   LOGO
+   LOGO (Moved to src/components/shared/Logo.jsx)
 ═══════════════════════════════════════════════════════ */
-function Logo({ size = 36 }) {
-  const id = React.useId().replace(/:/g, '');
-  return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-      <defs>
-        <linearGradient id={`la${id}`} x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#22d3ee"/><stop offset="1" stopColor="#818cf8"/>
-        </linearGradient>
-        <linearGradient id={`lb${id}`} x1="40" y1="0" x2="0" y2="40" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#f472b6"/><stop offset="1" stopColor="#a78bfa"/>
-        </linearGradient>
-        <radialGradient id={`rc${id}`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.2"/>
-          <stop offset="100%" stopColor="#22d3ee" stopOpacity="0"/>
-        </radialGradient>
-      </defs>
-      <circle cx="20" cy="20" r="19" fill={`url(#rc${id})`}/>
-      <path d="M20 4 A16 16 0 0 1 36 20" stroke={`url(#la${id})`} strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-      <path d="M20 36 A16 16 0 0 1 4 20"  stroke={`url(#lb${id})`} strokeWidth="2.5" strokeLinecap="round" fill="none"/>
-      <circle cx="20" cy="20" r="10" stroke="rgba(99,102,241,0.2)" strokeWidth="1" fill="none"/>
-      <circle cx="20" cy="4"  r="2.5" fill="#22d3ee"/>
-      <circle cx="36" cy="20" r="2"   fill="#818cf8"/>
-      <circle cx="20" cy="36" r="2.5" fill="#f472b6"/>
-      <circle cx="4"  cy="20" r="2"   fill="#a78bfa"/>
-      <line x1="20" y1="12" x2="20" y2="28" stroke="rgba(99,102,241,0.2)" strokeWidth="1"/>
-      <line x1="12" y1="20" x2="28" y2="20" stroke="rgba(99,102,241,0.2)" strokeWidth="1"/>
-      <circle cx="20" cy="20" r="4" fill={`url(#la${id})`}/>
-      <circle cx="20" cy="20" r="2" fill="white"/>
-    </svg>
-  );
-}
 
 /* ═══════════════════════════════════════════════════════
    NAVBAR
@@ -320,26 +291,14 @@ const NAV_LINKS = [
 ];
 
 function Navbar() {
-  const [isDark, setIsDark]   = useState(true);
+  const { isDark, toggleTheme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: light)');
-    const apply = e => {
-      const dark = !e.matches;
-      setIsDark(dark);
-      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-    };
-    apply(mq); mq.addEventListener('change', apply);
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', onScroll);
-    return () => { mq.removeEventListener('change', apply); window.removeEventListener('scroll', onScroll); };
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
-
-  const toggle = () => {
-    const next = !isDark; setIsDark(next);
-    document.documentElement.setAttribute('data-theme', next ? 'dark' : 'light');
-  };
 
   return (
     <nav style={{ position:'fixed', top:12, left:'50%', transform:'translateX(-50%)', width:'calc(100% - 2rem)', maxWidth:1200, zIndex:50 }}>
@@ -354,10 +313,7 @@ function Navbar() {
         transition:'box-shadow 0.3s',
       }}>
         <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-          <Logo size={32}/>
-          <span style={{ fontSize:'1.05rem', fontWeight:800, letterSpacing:'-0.02em', color:'var(--text-primary)' }}>
-            Skill<span className="gradient-text">Sphere</span>
-          </span>
+          <SkillSphereLogo size={32} layout="row" fontSize="1.05rem" />
         </div>
 
         <div className="hidden-mobile" style={{ alignItems:'center', gap:28 }}>
@@ -368,7 +324,7 @@ function Navbar() {
         </div>
 
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <button onClick={toggle} style={{ padding:7, borderRadius:10, background:'var(--card-inner-bg)', border:'1px solid var(--border-card)', cursor:'pointer', color:'var(--text-secondary)', transition:'all 0.2s', display:'flex', alignItems:'center' }} aria-label="Toggle theme">
+          <button onClick={toggleTheme} style={{ padding:7, borderRadius:10, background:'var(--card-inner-bg)', border:'1px solid var(--border-card)', cursor:'pointer', color:'var(--text-secondary)', transition:'all 0.2s', display:'flex', alignItems:'center' }} aria-label="Toggle theme">
             {isDark
               ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
               : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
@@ -895,8 +851,10 @@ const USE_CASES = [
 function UseCases() {
   const [ref, vis] = useInView(0.12);
   return (
-    <div ref={ref} style={{ position:'relative', padding:'64px 24px', borderTop:'1px solid var(--divider)', borderBottom:'1px solid var(--divider)', background:'var(--bg-page)' }}>
-      <div style={{ maxWidth:1400, margin:'0 auto' }}>
+    <div ref={ref} style={{ position:'relative', padding:'64px 24px', borderTop:'1px solid var(--divider)', borderBottom:'1px solid var(--divider)', overflow:'hidden' }}>
+      <div style={{ position:'absolute', top:'-15%', right:'-8%', width:520, height:520, filter:'blur(120px)', borderRadius:'50%', background:'radial-gradient(ellipse,rgba(34,211,238,0.09),transparent 70%)', pointerEvents:'none' }}/>
+      <div style={{ position:'absolute', bottom:'-15%', left:'-8%', width:480, height:480, filter:'blur(110px)', borderRadius:'50%', background:'radial-gradient(ellipse,rgba(167,139,250,0.08),transparent 70%)', pointerEvents:'none' }}/>
+      <div style={{ maxWidth:1400, margin:'0 auto', position:'relative', zIndex:1 }}>
         <div style={{ opacity:vis?1:0, transform:vis?'none':'translateY(24px)', transition:'opacity 0.65s ease,transform 0.65s ease', marginBottom:48, textAlign:'center' }}>
           <SectionLabel color="#22d3ee">Perfect for Every Team</SectionLabel>
           <h2 style={{ fontSize:'clamp(2rem,4vw,3.5rem)', fontWeight:800, letterSpacing:'-0.02em', lineHeight:1.2, marginBottom:18, color:'#22d3ee', textAlign:'center', animation:'headingReveal 0.8s ease 0.4s both', wordBreak:'break-word' }}>
@@ -908,19 +866,19 @@ function UseCases() {
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:14 }}>
           {USE_CASES.map((uc,i)=>(
-            <div key={uc.title} style={{
+            <div key={uc.title} className="card-hover" style={{
               opacity:vis?1:0,
               transform:vis?'none':'translateY(20px)',
-              transition:`opacity 0.5s ease ${i*0.1}s,transform 0.5s ease ${i*0.1}s`,
               padding:'20px 18px',
               borderRadius:16,
               background:'var(--card-bg)',
               border:'1px solid var(--border-card)',
+              backdropFilter:'blur(12px)',
               display:'flex',
               flexDirection:'column',
               gap:10,
               cursor:'default',
-              transition:'border-color 0.3s ease'
+              transition:`opacity 0.5s ease ${i*0.1}s,transform 0.5s ease ${i*0.1}s,border-color 0.3s ease`
             }}
             onMouseEnter={e=>e.currentTarget.style.borderColor=uc.color+'45'}
             onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border-card)'}>
@@ -1205,12 +1163,8 @@ const FEATURES = [
     icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> },
   { title:'Auto-ranked pipeline', desc:'Every applicant arrives sorted. One-click advance, pass or schedule — your team focuses on decisions, not admin.', color:'#34d399',
     icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> },
-  { title:'Collaborative review', desc:'Share candidate profiles, add notes and align with your team — all in one place, with audit trails for every decision.', color:'#f472b6',
-    icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg> },
   { title:'Bias-reduction guardrails', desc:'Signal-based scoring removes demographic proxies. Redacted views and audit modes keep teams accountable.', color:'#fbbf24',
     icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg> },
-  { title:'Explainable AI', desc:'Every score shows its reasoning. Confidence levels are always displayed. No black boxes in your hiring decisions.', color:'#06b6d4',
-    icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg> },
 ];
 
 function Features() {
@@ -1262,8 +1216,6 @@ const PILLARS = [
     icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> },
   { title:'Built for velocity', desc:'Auto-sort on arrival, one-click shortlisting, integrated scheduling. Hiring moves as fast as your team can decide.', color:'#fbbf24',
     icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> },
-  { title:'Radically transparent AI', desc:'AI estimates are clearly labeled. Confidence levels are always shown. You always know what the system knows vs. what it inferred.', color:'#a78bfa',
-    icon:<svg style={{width:20,height:20}} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg> },
 ];
 
 function Candidates() {
@@ -1328,6 +1280,9 @@ function CTA() {
       <div style={{ position:'absolute', top:0, left:'50%', transform:'translateX(-50%)', width:288, height:1, background:'linear-gradient(to right,transparent,rgba(34,211,238,0.4),transparent)' }}/>
 
       <div ref={ref} style={{ maxWidth:860, margin:'0 auto', textAlign:'center', position:'relative', zIndex:10, opacity:vis?1:0, transform:vis?'translateY(0)':'translateY(32px)', transition:'opacity 0.7s ease,transform 0.7s ease' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginBottom:16 }}>
+          <SkillSphereLogo size={36} layout="row" fontSize="1.2rem" />
+        </div>
         <SectionLabel color="#34d399">Get Started</SectionLabel>
         <h2 style={{ fontSize:'clamp(2.6rem,6vw,5.2rem)', fontWeight:800, letterSpacing:'-0.03em', lineHeight:1.04, marginBottom:22, color:'var(--text-primary)' }}>
           Ready to hire on<br/><span className="gradient-text">real ability?</span>
@@ -1455,36 +1410,7 @@ function SectionDivider() {
    ROOT
 ═══════════════════════════════════════════════════════ */
 export default function HomePage() {
-  const [isDark, setIsDark] = useState(true);
-  
-  useEffect(() => {
-    // Listen to system preference changes
-    const mq = window.matchMedia('(prefers-color-scheme: light)');
-    const apply = (e) => {
-      const dark = !e.matches;
-      setIsDark(dark);
-      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-    };
-    apply(mq);
-    mq.addEventListener('change', apply);
-    
-    // Listen to data-theme attribute changes (from navbar toggle)
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'data-theme') {
-          const theme = document.documentElement.getAttribute('data-theme');
-          setIsDark(theme === 'dark');
-        }
-      });
-    });
-    
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    
-    return () => {
-      mq.removeEventListener('change', apply);
-      observer.disconnect();
-    };
-  }, []);
+  const { isDark } = useTheme();
 
   return (
     <>
