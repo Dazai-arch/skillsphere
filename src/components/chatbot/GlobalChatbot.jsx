@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import ChatInterface from './ChatInterface';
 import { LogoMark } from '../shared/Topbar';
 
@@ -16,7 +17,13 @@ export default function GlobalChatbot({ role = 'candidate' }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  return (
+  // DashboardLayout wraps every page in `overflow-hidden` containers (for
+  // the sidebar/topbar scroll boundaries). Fixed-position elements still
+  // get visually clipped by an overflow-hidden ancestor in every major
+  // browser, which was cutting off/mispositioning the chat panel. Porting
+  // the whole widget straight onto document.body sidesteps that ancestor
+  // chain entirely, so `fixed` here is truly relative to the viewport.
+  return createPortal(
     <div ref={wrapperRef}>
       {/* Floating Button */}
       <button 
@@ -39,6 +46,7 @@ export default function GlobalChatbot({ role = 'candidate' }) {
           <ChatInterface role={role} onClose={() => setIsOpen(false)} />
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
