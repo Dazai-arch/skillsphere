@@ -28,7 +28,7 @@ export default function GlobalChatbot({ role = 'candidate' }) {
       {/* Floating Button */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-8 right-8 w-14 h-14 rounded-full flex items-center justify-center transition-all z-50 shadow-[0_0_20px_rgba(34,211,238,0.4)] hover:shadow-[0_0_30px_rgba(34,211,238,0.6)] border border-[#22d3ee]/50 cursor-pointer ${
+        className={`fixed bottom-8 right-8 w-14 h-14 rounded-full flex items-center justify-center transition-all z-[9999] shadow-[0_0_20px_rgba(34,211,238,0.4)] hover:shadow-[0_0_30px_rgba(34,211,238,0.6)] border border-[#22d3ee]/50 cursor-pointer ${
           isOpen 
             ? 'bg-[var(--bg-card)] border-[var(--border-hover)] scale-90 opacity-0 pointer-events-none' 
             : 'bg-[var(--bg-card)] hover:scale-105 opacity-100'
@@ -40,9 +40,14 @@ export default function GlobalChatbot({ role = 'candidate' }) {
         </div>
       </button>
 
-      {/* Chat Interface Modal */}
+      {/* Chat Interface Modal — always a floating widget, anchored to the
+          bottom-right corner with a small margin on every screen size.
+          It never takes over the full page; on narrow viewports its own
+          width/height (set in ChatInterface) simply shrinks to fit.
+          z-[10000] keeps it above every other overlay in the app (the
+          topbar is z-[300], other modals top out at z-[9999]). */}
       {isOpen && (
-        <div className="fixed inset-0 sm:inset-auto sm:bottom-6 sm:right-6 z-[60] animate-in fade-in slide-in-from-bottom-5 duration-300">
+        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[10000] animate-in fade-in slide-in-from-bottom-5 duration-300">
           <ChatInterface role={role} onClose={() => setIsOpen(false)} />
         </div>
       )}
