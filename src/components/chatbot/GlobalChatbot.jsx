@@ -35,7 +35,7 @@ export default function GlobalChatbot({ role = 'candidate' }) {
 
       {/* Chat Interface Modal */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 z-[60] animate-in fade-in slide-in-from-bottom-5 duration-300">
+        <div className="fixed inset-0 sm:inset-auto sm:bottom-6 sm:right-6 z-[60] animate-in fade-in slide-in-from-bottom-5 duration-300">
           <ChatInterface role={role} onClose={() => setIsOpen(false)} />
         </div>
       )}

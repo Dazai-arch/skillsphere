@@ -166,7 +166,7 @@ export default function ChatInterface({ role, onClose }) {
   };
 
   return (
-    <div className="w-[360px] h-[600px] max-h-[80vh] flex flex-col bg-[var(--bg-panel)] rounded-2xl shadow-2xl overflow-hidden border border-[var(--border-card)] font-sans">
+    <div className="w-full h-full sm:w-[360px] sm:h-[600px] sm:max-h-[80vh] flex flex-col bg-[var(--bg-panel)] rounded-none sm:rounded-2xl shadow-2xl overflow-hidden border-0 sm:border border-[var(--border-card)] font-sans">
       
       {/* Header */}
       <div className="bg-gradient-to-r from-cyan-500 to-cyan-700 dark:from-cyan-600 dark:to-cyan-900 p-4 flex items-center justify-between shrink-0">
