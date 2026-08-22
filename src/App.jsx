@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
-import Homepage          from './pages/HomePage';
+import Homepage          from './pages/home/HomePage';
 import SignInPage        from './pages/auth/SignInPage';
 import GetStartedPage    from './pages/auth/GetStartedPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
