@@ -6,16 +6,24 @@
  * PDFs, job attachments) so the signing logic — and the list of which
  * params actually get signed — lives in exactly one place.
  *
- * Only { timestamp, folder, public_id } are signed. Cloudinary requires
- * whatever the browser sends to match these exactly, or it rejects the
- * upload as a signature mismatch — that's what stops a client from
- * uploading into a folder/public_id we didn't authorize.
+ * By default only { timestamp, folder, public_id } are signed. Cloudinary
+ * requires whatever the browser sends to match these exactly, or it
+ * rejects the upload as a signature mismatch — that's what stops a
+ * client from uploading into a folder/public_id we didn't authorize.
+ *
+ * An optional `transformation` (e.g. 'q_auto:good,f_auto') can also be
+ * signed — this is what lets Cloudinary compress the asset itself at
+ * upload time instead of storing it byte-for-byte. If passed, the
+ * browser must send that exact same transformation string back or the
+ * signature won't match, same as folder/public_id.
  */
 const cloudinary = require('../config/cloudinary');
 
-const signUpload = ({ folder, publicId }) => {
+const signUpload = ({ folder, publicId, transformation }) => {
   const timestamp = Math.round(Date.now() / 1000);
   const paramsToSign = { timestamp, folder, public_id: publicId };
+  if (transformation) paramsToSign.transformation = transformation;
+
   const signature = cloudinary.utils.api_sign_request(paramsToSign, process.env.CLOUDINARY_API_SECRET);
 
   return {
@@ -23,6 +31,7 @@ const signUpload = ({ folder, publicId }) => {
     timestamp,
     folder,
     publicId,
+    transformation,
     apiKey:    process.env.CLOUDINARY_API_KEY,
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
   };

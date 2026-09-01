@@ -90,7 +90,11 @@ const getPhotoSignature = async (req, res, next) => {
     // whatever the client sends to Cloudinary must match exactly, or
     // Cloudinary rejects the upload. Keeps the client from being able
     // to smuggle in a different folder/public_id than the one we meant.
-    const paramsToSign = { timestamp, folder, public_id };
+    // `transformation` is signed too so Cloudinary compresses (and
+    // picks the best delivery format) at upload time rather than
+    // storing the photo untouched.
+    const transformation = 'q_auto:good,f_auto';
+    const paramsToSign = { timestamp, folder, public_id, transformation };
     const signature = cloudinary.utils.api_sign_request(paramsToSign, process.env.CLOUDINARY_API_SECRET);
 
     sendSuccess(res, {
@@ -99,6 +103,8 @@ const getPhotoSignature = async (req, res, next) => {
         timestamp,
         folder,
         publicId: public_id,
+        transformation,
+        resourceType: 'image',
         apiKey:   process.env.CLOUDINARY_API_KEY,
         cloudName: process.env.CLOUDINARY_CLOUD_NAME,
       },

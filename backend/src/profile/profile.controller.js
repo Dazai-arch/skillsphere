@@ -12,13 +12,29 @@ const path      = require('path');
 /* GET /api/profile/cert-signature?ext=pdf
    Authorizes a direct browser → Cloudinary upload for a certification
    PDF, so the file never passes through this server (same pattern as
-   the resume/avatar/job-attachment signature endpoints). */
+   the resume/avatar/job-attachment signature endpoints).
+
+   Cloudinary's 'raw' resource type (used below for non-PDFs) is stored
+   untouched — no compression is possible on it. PDFs, however, can be
+   uploaded as resource_type 'image' instead, which lets Cloudinary
+   re-render/compress them via a transformation while keeping the
+   delivered file a .pdf. So for PDFs we sign a 'q_auto' transformation
+   and skip baking the extension into public_id (Cloudinary appends the
+   detected format automatically for image-type uploads, same as it
+   does for photos — baking it in ourselves would double it up). */
 const getCertSignature = async (req, res, next) => {
   try {
-    const ext = (req.query.ext || 'pdf').toString();
-    const publicId = buildPublicId(req.user._id, 'cert', ext);
-    const signed = signUpload({ folder: 'skillsphere/certs', publicId });
-    sendSuccess(res, { data: signed });
+    const ext = (req.query.ext || 'pdf').toString().toLowerCase();
+    const isPdf = ext === 'pdf';
+
+    const publicId = buildPublicId(req.user._id, 'cert', isPdf ? undefined : ext);
+    const signed = signUpload({
+      folder: 'skillsphere/certs',
+      publicId,
+      transformation: isPdf ? 'q_auto' : undefined,
+    });
+
+    sendSuccess(res, { data: { ...signed, resourceType: isPdf ? 'image' : 'raw' } });
   } catch (err) {
     next(err);
   }
@@ -44,8 +60,12 @@ const getPhotoSignature = async (req, res, next) => {
   try {
     const ext = (req.query.ext || 'jpg').toString();
     const publicId = buildPublicId(req.user._id, 'profile-photo', ext);
-    const signed = signUpload({ folder: 'skillsphere/avatars', publicId });
-    sendSuccess(res, { data: signed });
+    const signed = signUpload({
+      folder: 'skillsphere/avatars',
+      publicId,
+      transformation: 'q_auto:good,f_auto', // compress + auto-pick best delivery format (webp/avif)
+    });
+    sendSuccess(res, { data: { ...signed, resourceType: 'image' } });
   } catch (err) {
     next(err);
   }

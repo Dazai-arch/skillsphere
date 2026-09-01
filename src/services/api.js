@@ -196,11 +196,13 @@ export const uploadUserPhoto = async (file) => {
   //    doesn't touch the file at all — just proves we're allowed to
   //    upload to this folder under this account).
   const { data: sigData } = await api.get('/user/me/photo-signature');
-  const { signature, timestamp, folder, publicId, apiKey, cloudName } = sigData.data;
+  const { signature, timestamp, folder, publicId, transformation, apiKey, cloudName } = sigData.data;
 
   // 2. Upload the file directly to Cloudinary. Must include exactly the
-  //    same params that were signed (folder, public_id, timestamp) or
-  //    Cloudinary rejects it as a signature mismatch.
+  //    same params that were signed (folder, public_id, timestamp,
+  //    transformation) or Cloudinary rejects it as a signature mismatch.
+  //    `transformation` is what makes Cloudinary compress the photo
+  //    (and auto-pick the best delivery format) at upload time.
   const cloudForm = new FormData();
   cloudForm.append('file', file);
   cloudForm.append('api_key', apiKey);
@@ -208,6 +210,7 @@ export const uploadUserPhoto = async (file) => {
   cloudForm.append('signature', signature);
   cloudForm.append('folder', folder);
   cloudForm.append('public_id', publicId);
+  if (transformation) cloudForm.append('transformation', transformation);
 
   const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
     method: 'POST',
@@ -244,17 +247,24 @@ export const deleteAccount = async (confirmText) => {
  * '/jobs/resume-signature', '/profile/cert-signature',
  * '/jobs/attachment-signature?type=jobDescriptionPdf').
  *
- * Images upload to Cloudinary's `image/upload` endpoint; everything
- * else (PDFs, DOC/DOCX) goes to `raw/upload` — Cloudinary treats these
- * as fundamentally different asset types and rejects a mismatched one.
+ * Images and PDFs upload to Cloudinary's `image/upload` endpoint — for
+ * PDFs this isn't a mistake: uploading as 'image' (rather than 'raw')
+ * is what lets Cloudinary apply the signed `transformation` and
+ * actually compress the file instead of storing it byte-for-byte.
+ * Anything else (DOC/DOCX) goes to `raw/upload`, untouched, since
+ * Cloudinary can't transform non-PDF documents. The backend decides
+ * which is which (via `resourceType` on the signature response) so
+ * this logic lives in exactly one place.
  */
 const uploadFileToCloudinary = async (file, signatureEndpoint) => {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
   const sep = signatureEndpoint.includes('?') ? '&' : '?';
   const { data: sigData } = await api.get(`${signatureEndpoint}${sep}ext=${encodeURIComponent(ext)}`);
-  const { signature, timestamp, folder, publicId, apiKey, cloudName } = sigData.data;
+  const { signature, timestamp, folder, publicId, transformation, apiKey, cloudName } = sigData.data;
 
-  const resourceType = file.type.startsWith('image/') ? 'image' : 'raw';
+  // Fall back to the old file.type sniffing only if an older/uncached
+  // signature response doesn't include resourceType.
+  const resourceType = sigData.data.resourceType || (file.type.startsWith('image/') ? 'image' : 'raw');
 
   const cloudForm = new FormData();
   cloudForm.append('file', file);
@@ -263,6 +273,7 @@ const uploadFileToCloudinary = async (file, signatureEndpoint) => {
   cloudForm.append('signature', signature);
   cloudForm.append('folder', folder);
   cloudForm.append('public_id', publicId);
+  if (transformation) cloudForm.append('transformation', transformation);
 
   const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`, {
     method: 'POST',

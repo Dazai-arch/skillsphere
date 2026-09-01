@@ -19,10 +19,20 @@ const { signUpload, buildPublicId } = require('../utils/cloudinarySign');
    two-hop path on Render's free tier). */
 const getResumeSignature = async (req, res, next) => {
   try {
-    const ext = (req.query.ext || 'pdf').toString();
-    const publicId = buildPublicId(req.user._id, 'resume', ext);
-    const signed = signUpload({ folder: 'skillsphere/resumes', publicId });
-    sendSuccess(res, { data: signed });
+    const ext = (req.query.ext || 'pdf').toString().toLowerCase();
+    const isPdf = ext === 'pdf';
+
+    // PDFs upload as resource_type 'image' with a q_auto transformation
+    // so Cloudinary actually compresses them; DOC/DOCX resumes stay
+    // 'raw' (untouched) since Cloudinary can't transform those.
+    const publicId = buildPublicId(req.user._id, 'resume', isPdf ? undefined : ext);
+    const signed = signUpload({
+      folder: 'skillsphere/resumes',
+      publicId,
+      transformation: isPdf ? 'q_auto' : undefined,
+    });
+
+    sendSuccess(res, { data: { ...signed, resourceType: isPdf ? 'image' : 'raw' } });
   } catch (err) {
     next(err);
   }
@@ -33,10 +43,17 @@ const getResumeSignature = async (req, res, next) => {
 const getAttachmentSignature = async (req, res, next) => {
   try {
     const type = (req.query.type || 'attachment').toString();
-    const ext  = (req.query.ext || 'pdf').toString();
-    const publicId = buildPublicId(req.user._id, type, ext);
-    const signed = signUpload({ folder: 'skillsphere/job-attachments', publicId });
-    sendSuccess(res, { data: signed });
+    const ext  = (req.query.ext || 'pdf').toString().toLowerCase();
+    const isPdf = ext === 'pdf';
+
+    const publicId = buildPublicId(req.user._id, type, isPdf ? undefined : ext);
+    const signed = signUpload({
+      folder: 'skillsphere/job-attachments',
+      publicId,
+      transformation: isPdf ? 'q_auto' : undefined,
+    });
+
+    sendSuccess(res, { data: { ...signed, resourceType: isPdf ? 'image' : 'raw' } });
   } catch (err) {
     next(err);
   }
