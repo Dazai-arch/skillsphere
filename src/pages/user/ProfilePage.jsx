@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { LogoMark } from '../../components/shared/Topbar';
 import { getProfile, saveProfile } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -646,6 +647,7 @@ const SectionHoverPreview = ({ sectionId, profile, solid }) => {
 };
 
 export default function ProfilePage() {
+  const { setUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState('');
@@ -691,6 +693,11 @@ export default function ProfilePage() {
     try {
       const updated = await saveProfile({}, file);
       setProfile(updated);
+      // Sidebar and AccountPage read the avatar from AuthContext's
+      // user.photoURL, not from this page's local `profile` state —
+      // without this they'd keep showing the old/placeholder photo
+      // until the next full page load re-fetches /me.
+      setUser((prev) => (prev ? { ...prev, photoURL: updated?.personal?.photoUrl || null } : prev));
     } catch {
       setProfileError('Could not upload photo. Please try again.');
     } finally {
@@ -710,6 +717,7 @@ export default function ProfilePage() {
     try {
       const updated = await saveProfile({ personal: { ...(profile?.personal || {}), photoUrl: '' } });
       setProfile(updated);
+      setUser((prev) => (prev ? { ...prev, photoURL: null } : prev));
     } catch {
       setProfileError('Could not remove photo. Please try again.');
     } finally {
