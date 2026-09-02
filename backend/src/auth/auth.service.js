@@ -334,4 +334,5 @@ module.exports = {
   resetPassword,
   refreshTokens,
   signout,
+  deleteFirebaseUser,
 };

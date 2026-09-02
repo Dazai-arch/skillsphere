@@ -4,6 +4,7 @@ const AppError        = require('../utils/AppError');
 const { sendSuccess } = require('../utils/response');
 const { deleteUploadedFile } = require('../utils/fileCleanup');
 const cloudinary      = require('../config/cloudinary');
+const { deleteFirebaseUser } = require('../auth/auth.service');
 
 /* ════════════════════════════════════════════════
    GET /api/user/me
@@ -204,6 +205,17 @@ const deleteMe = async (req, res, next) => {
     }
 
     await User.findByIdAndDelete(user._id);
+
+    // Mongo is the harder side to roll back cleanly, so it goes first —
+    // Firebase deletion happens after, and deleteFirebaseUser() already
+    // swallows its own errors (just logs) rather than throwing, since
+    // from the app's point of view the account is already gone the
+    // moment the Mongo record is deleted. An orphaned Firebase record
+    // is a cleanup problem, not a reason to fail this request and leave
+    // the user thinking deletion didn't work.
+    if (user.firebaseUid) {
+      await deleteFirebaseUser(user.firebaseUid);
+    }
 
     sendSuccess(res, { message: 'Account deleted successfully.' });
   } catch (err) {

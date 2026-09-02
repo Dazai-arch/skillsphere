@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { getCandidateProfile } from '../../services/api';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -95,7 +96,7 @@ export default function CandidateProfileModal({ isOpen, onClose, candidateId }) 
     ...(p.skills?.libraries || []),
   ] : [];
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[999] flex items-center justify-center p-4" onClick={onClose}>
       <div
         className="relative w-full max-w-[720px] bg-[var(--bg-card)] rounded-2xl flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.6)] border border-[var(--border-card)] overflow-hidden max-h-[90vh]"
@@ -350,6 +351,7 @@ export default function CandidateProfileModal({ isOpen, onClose, candidateId }) 
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

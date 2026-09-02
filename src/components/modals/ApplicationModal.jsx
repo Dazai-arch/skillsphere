@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useJobs } from '../../context/JobsContext';
@@ -141,7 +142,7 @@ export default function ApplicationModal({ isOpen, onClose, jobId }) {
   const profileComplete = !!user?.profileCompleted;
   const canProceedFromConsent = consent && (resumeFile || shareProfile);
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[999] flex items-center justify-center p-4" onClick={resetAndClose}>
       <div
         className={`relative w-full transition-all duration-300 ${step === 3 ? 'max-w-[440px] bg-[var(--bg-card)] dark:bg-[#050810]' : 'max-w-[560px] bg-[var(--bg-card)] dark:bg-[#0b101e]'} rounded-2xl flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.6)] border border-[var(--border-card)] overflow-hidden max-h-[90vh]`}
@@ -537,6 +538,7 @@ export default function ApplicationModal({ isOpen, onClose, jobId }) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

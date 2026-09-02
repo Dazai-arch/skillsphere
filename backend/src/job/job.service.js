@@ -470,6 +470,14 @@ const listRecommended = async (candidateId) => {
   const pool = await Job.find({
     status: 'active',
     'applications.candidateId': { $ne: candidateId },
+    // status alone isn't enough — nothing flips status to 'closed' just
+    // because applicationDeadline passed (that's computed separately as
+    // the isExpired virtual), so without this an expired-but-still-
+    // "active" listing would still be eligible to recommend.
+    $or: [
+      { applicationDeadline: null },
+      { applicationDeadline: { $gte: new Date() } },
+    ],
   })
     .sort({ publishedAt: -1 })
     .limit(RECOMMEND_POOL_SIZE)
