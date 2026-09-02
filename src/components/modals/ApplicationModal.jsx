@@ -205,14 +205,14 @@ export default function ApplicationModal({ isOpen, onClose, jobId }) {
                     {job.attachments?.jobDescriptionPdf?.url && (
                       <a href={fileUrl(job.attachments.jobDescriptionPdf.url)} target="_blank" rel="noreferrer" download
                         className="flex items-center justify-between gap-2 bg-[var(--bg-panel)] border border-[var(--border-card)] rounded-lg px-3 py-2 hover:border-cyan-500/50 transition-colors group">
-                        <span className="flex items-center gap-2 font-sans text-[0.85rem] text-[var(--text-primary)] truncate"><IconFile /> {job.attachments.jobDescriptionPdf.originalName || 'Job description.pdf'}</span>
+                        <span className="flex items-center gap-2 font-sans text-[0.85rem] text-[var(--text-primary)] truncate min-w-0"><IconFile /> {job.attachments.jobDescriptionPdf.originalName || 'Job description.pdf'}</span>
                         <span className="text-cyan-400 group-hover:text-cyan-300"><IconDownload /></span>
                       </a>
                     )}
                     {job.attachments?.companyBrochurePdf?.url && (
                       <a href={fileUrl(job.attachments.companyBrochurePdf.url)} target="_blank" rel="noreferrer" download
                         className="flex items-center justify-between gap-2 bg-[var(--bg-panel)] border border-[var(--border-card)] rounded-lg px-3 py-2 hover:border-cyan-500/50 transition-colors group">
-                        <span className="flex items-center gap-2 font-sans text-[0.85rem] text-[var(--text-primary)] truncate"><IconFile /> {job.attachments.companyBrochurePdf.originalName || 'Company brochure.pdf'}</span>
+                        <span className="flex items-center gap-2 font-sans text-[0.85rem] text-[var(--text-primary)] truncate min-w-0"><IconFile /> {job.attachments.companyBrochurePdf.originalName || 'Company brochure.pdf'}</span>
                         <span className="text-cyan-400 group-hover:text-cyan-300"><IconDownload /></span>
                       </a>
                     )}
@@ -301,7 +301,7 @@ export default function ApplicationModal({ isOpen, onClose, jobId }) {
                       </label>
                       <label className={`flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-all ${resumeFile ? 'border-cyan-500 bg-cyan-500/10' : 'border-[var(--border-card)] bg-[var(--bg-nav)]'}`}>
                         <input type="radio" name="resumeMode" checked={!!resumeFile} onChange={() => document.getElementById('resume-upload-input')?.click()} className="mt-0.5" />
-                        <span className="font-sans text-[0.85rem] text-[var(--text-primary)] leading-relaxed flex-1">
+                        <span className="font-sans text-[0.85rem] text-[var(--text-primary)] leading-relaxed flex-1 min-w-0">
                           Upload a resume instead
                           {resumeFile && <span className="block text-[0.75rem] text-[var(--text-secondary)] mt-1 truncate">{resumeFile.name}</span>}
                         </span>
