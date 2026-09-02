@@ -5,6 +5,7 @@ import {
   GoogleAuthProvider,
   GithubAuthProvider,
   signInWithPopup,
+  fetchSignInMethodsForEmail,
 } from 'firebase/auth';
 import { auth } from '../../config/firebase'; // your Firebase client config
 import { signin, oauthSignin, getMe } from '../../services/api';
@@ -105,10 +106,30 @@ export default function SignInPage() {
         setLoading(false);
         return;
       }
-      // The banner text is intentionally generic (raw Firebase/API errors
-      // aren't great to show a real user), but that means the actual
-      // reason is otherwise invisible — log it so it's at least visible
-      // in devtools instead of silently swallowed.
+
+      // Firebase's "one account per email" rule: once an email has more
+      // than one possible sign-in method (e.g. GitHub + a password added
+      // later via forgot-password), it refuses to silently pick one —
+      // it wants the person to prove they own the account via a method
+      // it already trusts. Look up which method that actually is instead
+      // of showing a dead-end generic error.
+      if (err.code === 'auth/account-exists-with-different-credential') {
+        const email = err.customData?.email;
+        const methodLabel = (id) => ({ password: 'your email and password', 'google.com': 'Google' }[id] || id);
+        try {
+          const methods = email ? await fetchSignInMethodsForEmail(auth, email) : [];
+          setError(
+            methods[0]
+              ? `This email already has a sign-in method set up — please sign in with ${methodLabel(methods[0])} instead.`
+              : 'This email is already registered with a different sign-in method.'
+          );
+        } catch {
+          setError('This email is already registered with a different sign-in method. Please sign in that way instead.');
+        }
+        setLoading(false);
+        return;
+      }
+
       console.error('[OAuth sign-in failed]', err.code || '(no code)', err.message, err);
       setError(err.response?.data?.message || 'OAuth sign-in failed. Please try again.');
     } finally {

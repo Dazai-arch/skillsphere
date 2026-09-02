@@ -4,6 +4,7 @@ import {
   GoogleAuthProvider,
   GithubAuthProvider,
   signInWithPopup,
+  fetchSignInMethodsForEmail,
 } from 'firebase/auth';
 import { auth } from '../../config/firebase';
 import { signup, oauthSignin, sendSignupOtp, verifySignupOtp, getMe } from '../../services/api';
@@ -211,6 +212,24 @@ export default function GetStartedPage() {
       );
     } catch (err) {
       if (err.code === 'auth/popup-closed-by-user') { setLoading(false); return; }
+
+      if (err.code === 'auth/account-exists-with-different-credential') {
+        const email = err.customData?.email;
+        const methodLabel = (id) => ({ password: 'your email and password', 'google.com': 'Google' }[id] || id);
+        try {
+          const methods = email ? await fetchSignInMethodsForEmail(auth, email) : [];
+          setError(
+            methods[0]
+              ? `This email already has a sign-in method set up — please sign in with ${methodLabel(methods[0])} instead.`
+              : 'This email is already registered with a different sign-in method.'
+          );
+        } catch {
+          setError('This email is already registered with a different sign-in method. Please sign in that way instead.');
+        }
+        setLoading(false);
+        return;
+      }
+
       console.error('[OAuth sign-in failed]', err.code || '(no code)', err.message, err);
       setError(err.response?.data?.message || 'OAuth sign-in failed. Please try again.');
     } finally {
