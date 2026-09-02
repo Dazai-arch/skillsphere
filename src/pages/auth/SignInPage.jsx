@@ -105,6 +105,11 @@ export default function SignInPage() {
         setLoading(false);
         return;
       }
+      // The banner text is intentionally generic (raw Firebase/API errors
+      // aren't great to show a real user), but that means the actual
+      // reason is otherwise invisible — log it so it's at least visible
+      // in devtools instead of silently swallowed.
+      console.error('[OAuth sign-in failed]', err.code || '(no code)', err.message, err);
       setError(err.response?.data?.message || 'OAuth sign-in failed. Please try again.');
     } finally {
       setLoading(false);

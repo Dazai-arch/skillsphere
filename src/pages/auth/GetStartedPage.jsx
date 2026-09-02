@@ -211,6 +211,7 @@ export default function GetStartedPage() {
       );
     } catch (err) {
       if (err.code === 'auth/popup-closed-by-user') { setLoading(false); return; }
+      console.error('[OAuth sign-in failed]', err.code || '(no code)', err.message, err);
       setError(err.response?.data?.message || 'OAuth sign-in failed. Please try again.');
     } finally {
       setLoading(false);
